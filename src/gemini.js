@@ -1,7 +1,7 @@
 const STYLE_PREFIX =
   "Children's book illustration in a warm, whimsical watercolor style with soft edges and bright cheerful colors. Simple, rounded shapes suitable for ages 4-7.";
 
-const MODEL = "gemini-2.0-flash-preview-image-generation";
+const MODEL = "gemini-3-pro-image-preview";
 
 /**
  * Build the text prompt for the character model sheet.
