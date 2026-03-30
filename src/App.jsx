@@ -152,17 +152,13 @@ export default function App() {
   const handleDeleteStory = useCallback(async () => {
     if (!activeStoryId) return;
     await deleteStoryDb(activeStoryId);
-    setStoryList((prev) => prev.filter((s) => s.id !== activeStoryId));
+    const remaining = storyList.filter((s) => s.id !== activeStoryId);
+    setStoryList(remaining);
     setStory(null);
     setCharSheetUrl(null);
     setSectionImages({});
-    // select first remaining or clear
-    setStoryList((prev) => {
-      if (prev.length > 0) setActiveStoryId(prev[0].id);
-      else setActiveStoryId(null);
-      return prev;
-    });
-  }, [activeStoryId]);
+    setActiveStoryId(remaining.length > 0 ? remaining[0].id : null);
+  }, [activeStoryId, storyList]);
 
   /* ---- API key ---- */
 

@@ -65,6 +65,10 @@ function buildMarkdown(story, imageFiles) {
   return lines.join("\n");
 }
 
+function sanitizeFilename(name, fallback) {
+  return (name || fallback).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+}
+
 /**
  * Export story as a ZIP (story.json + images/ + story.md).
  */
@@ -79,7 +83,8 @@ async function exportToZip(story) {
   for (const [id, rec] of Object.entries(imageMap)) {
     const { bytes, mime } = dataUrlToBytes(rec.data);
     const ext = extensionForMime(mime);
-    const filename = `${String(counter).padStart(2, "0")}_${(rec.caption || id).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40)}.${ext}`;
+    const prefix = String(counter).padStart(2, "0");
+    const filename = `${prefix}_${sanitizeFilename(rec.caption, id)}.${ext}`;
     imagesFolder.file(filename, bytes);
     imageFiles[id] = filename;
     counter++;
