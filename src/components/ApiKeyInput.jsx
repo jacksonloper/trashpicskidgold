@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function ApiKeyInput({ apiKey, onApiKeyChange }) {
+export default function ApiKeyInput({ apiKey, onApiKeyChange, onSaveKey, saved }) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -21,6 +21,14 @@ export default function ApiKeyInput({ apiKey, onApiKeyChange }) {
         >
           {visible ? "Hide" : "Show"}
         </button>
+        <button
+          type="button"
+          className="btn-small btn-save-key"
+          onClick={onSaveKey}
+          disabled={!apiKey.trim()}
+        >
+          {saved ? "✓ Saved" : "💾 Save Key"}
+        </button>
       </div>
       <p className="hint">
         Get a free key at{" "}
@@ -31,6 +39,7 @@ export default function ApiKeyInput({ apiKey, onApiKeyChange }) {
         >
           Google AI Studio
         </a>
+        . Click &ldquo;Save Key&rdquo; to persist it in your browser.
       </p>
     </div>
   );

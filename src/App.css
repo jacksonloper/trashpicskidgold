@@ -1,24 +1,59 @@
 /* ---- App.css ---- */
 
+/* ---- Navbar ---- */
+
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0.5rem 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.navbar-brand {
+  font-size: 1.25rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.navbar-stories {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.story-select {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  max-width: 220px;
+}
+
+.btn-danger {
+  color: #c62828;
+  border-color: #ef9a9a;
+}
+
+.btn-danger:hover {
+  background: #fce4ec;
+}
+
+/* ---- App shell ---- */
+
+.app-shell {
+  min-height: 100vh;
+}
+
 .app {
   max-width: 800px;
   margin: 0 auto;
   padding: 1rem;
-}
-
-header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-header h1 {
-  font-size: 2rem;
-  margin: 0;
-}
-
-.subtitle {
-  color: #666;
-  margin-top: 0.25rem;
 }
 
 /* ---- Cards ---- */
@@ -62,14 +97,31 @@ header h1 {
 .api-key-row {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .api-key-row input {
   flex: 1;
+  min-width: 180px;
   padding: 0.5rem 0.75rem;
   border: 1px solid #ccc;
   border-radius: 6px;
   font-size: 0.95rem;
+}
+
+.btn-save-key {
+  background: #e8f5e9;
+  border-color: #a5d6a7;
+  color: #2e7d32;
+}
+
+.btn-save-key:hover:not(:disabled) {
+  background: #c8e6c9;
+}
+
+.btn-save-key:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .hint {
@@ -133,6 +185,41 @@ header h1 {
   font-size: 0.95rem;
   margin-bottom: 0.75rem;
   box-sizing: border-box;
+}
+
+/* ---- Markdown sections ---- */
+
+.markdown-card {
+  margin-bottom: 1rem;
+  background: #fffde7;
+  border: 1px dashed #e0d654;
+}
+
+.markdown-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+/* ---- Add section row ---- */
+
+.add-section-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ---- Export ---- */
+
+.export-section .export-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 /* ---- Buttons ---- */
