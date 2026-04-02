@@ -4,6 +4,8 @@ export default function Navbar({
   onSelectStory,
   onNewStory,
   onDeleteStory,
+  onLoadExample,
+  loadingExample,
 }) {
   return (
     <nav className="navbar">
@@ -29,6 +31,16 @@ export default function Navbar({
 
         <button type="button" className="btn-small" onClick={onNewStory}>
           + New Story
+        </button>
+
+        <button
+          type="button"
+          className="btn-small"
+          onClick={onLoadExample}
+          disabled={loadingExample}
+          title="Load a pre-made example story for testing"
+        >
+          {loadingExample ? "Loading…" : "📋 Example"}
         </button>
 
         {activeStoryId && (

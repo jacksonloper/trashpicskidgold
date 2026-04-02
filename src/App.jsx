@@ -24,6 +24,7 @@ import {
   newImageId,
   createBlankStory,
 } from "./db";
+import { loadExampleStory } from "./exampleStory";
 import "./App.css";
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
   const [generatingSections, setGeneratingSections] = useState({});
   const [error, setError] = useState(null);
   const [ready, setReady] = useState(false);
+  const [loadingExample, setLoadingExample] = useState(false);
 
   const saveTimer = useRef(null);
 
@@ -159,6 +161,20 @@ export default function App() {
     setSectionImages({});
     setActiveStoryId(remaining.length > 0 ? remaining[0].id : null);
   }, [activeStoryId, storyList]);
+
+  const handleLoadExample = useCallback(async () => {
+    setLoadingExample(true);
+    setError(null);
+    try {
+      const { storyId, story: newStory } = await loadExampleStory();
+      setStoryList((prev) => [...prev, { id: storyId, title: newStory.title }]);
+      setActiveStoryId(storyId);
+    } catch (err) {
+      setError("Failed to load example story: " + err.message);
+    } finally {
+      setLoadingExample(false);
+    }
+  }, []);
 
   /* ---- API key ---- */
 
@@ -327,6 +343,8 @@ export default function App() {
         onSelectStory={setActiveStoryId}
         onNewStory={handleNewStory}
         onDeleteStory={handleDeleteStory}
+        onLoadExample={handleLoadExample}
+        loadingExample={loadingExample}
       />
 
       <div className="app">
