@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import AgeGate from "./components/AgeGate";
+import { hasRecentAgreement } from "./ageGateStore";
 import Navbar from "./components/Navbar";
 import ApiKeyInput from "./components/ApiKeyInput";
 import CharacterEditor from "./components/CharacterEditor";
@@ -41,6 +43,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [ready, setReady] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
+  const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
 
   const saveTimer = useRef(null);
 
@@ -334,6 +337,10 @@ export default function App() {
   /* ---- render ---- */
 
   if (!ready) return null; // waiting for DB
+
+  if (!ageAgreed) {
+    return <AgeGate onAccept={() => setAgeAgreed(true)} />;
+  }
 
   return (
     <div className="app-shell">
