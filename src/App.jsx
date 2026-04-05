@@ -234,7 +234,7 @@ export default function App() {
         ...s.jsonblob,
         referenceGraphics: [
           ...s.jsonblob.referenceGraphics,
-          { id, label: "", kind: "character", imageId: null },
+          { id, label: "", kind: "character", imageId: null, prompt: "" },
         ],
       },
     }));
@@ -304,7 +304,9 @@ export default function App() {
           jsonblob: {
             ...s.jsonblob,
             referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
-              rg.id === rgId ? { ...rg, imageId: imgId } : rg
+              rg.id === rgId
+                ? { ...rg, imageId: imgId, prompt: userPrompt }
+                : rg
             ),
           },
         }));
@@ -405,6 +407,7 @@ export default function App() {
           referenceGraphics,
           sections,
           caption,
+          allImages,
           textModel
         );
         setIllustrationPlan({ idx, ...plan });
@@ -414,7 +417,7 @@ export default function App() {
         setPlanningSections((prev) => ({ ...prev, [idx]: false }));
       }
     },
-    [apiKey, style, referenceGraphics, sections, story]
+    [apiKey, allImages, style, referenceGraphics, sections, story]
   );
 
   const handleApproveIllustration = useCallback(

@@ -149,14 +149,18 @@ export function migrateStory(story) {
     changed = true;
   }
 
-  // Ensure every referenceGraphic has a kind
-  const needsKind = (blob.referenceGraphics ?? []).some((rg) => !rg.kind);
-  if (needsKind) {
+  // Ensure every referenceGraphic has a kind and a prompt field
+  const needsKindOrPrompt = (blob.referenceGraphics ?? []).some(
+    (rg) => !rg.kind || rg.prompt === undefined
+  );
+  if (needsKindOrPrompt) {
     blob = {
       ...blob,
-      referenceGraphics: blob.referenceGraphics.map((rg) =>
-        rg.kind ? rg : { ...rg, kind: "other" }
-      ),
+      referenceGraphics: blob.referenceGraphics.map((rg) => ({
+        ...rg,
+        kind: rg.kind || "other",
+        prompt: rg.prompt ?? "",
+      })),
     };
     changed = true;
   }

@@ -51,9 +51,10 @@ export function buildRefGraphicPrompt(style, kind, userPrompt) {
  *
  * @param {string} apiKey
  * @param {string} style         – illustration style description
- * @param {Array<{id:string, label:string, kind:string, imageId:string|null}>} referenceGraphics
+ * @param {Array<{id:string, label:string, kind:string, imageId:string|null, prompt:string}>} referenceGraphics
  * @param {Array} sections       – story sections
  * @param {string} targetCaption – the caption for the illustration to generate
+ * @param {Object<string,string>} allImages – imageId → dataUrl map of all loaded images
  * @param {string} [model]      – Gemini model to use (defaults to quality)
  * @returns {Promise<{prompt:string, referenceImageIds:string[]}>}
  */
@@ -63,6 +64,7 @@ export async function planIllustration(
   referenceGraphics,
   sections,
   targetCaption,
+  allImages,
   model
 ) {
   const storyText = sections
@@ -74,12 +76,16 @@ export async function planIllustration(
     })
     .join("\n\n");
 
-  const refLines = referenceGraphics
-    .filter((rg) => rg.imageId)
-    .map(
-      (rg) =>
-        `- imageId="${rg.imageId}", label="${rg.label}", kind="${rg.kind}"`
-    )
+  const refsWithImages = referenceGraphics.filter((rg) => rg.imageId);
+
+  const refLines = refsWithImages
+    .map((rg) => {
+      let line = `- imageId="${rg.imageId}", label="${rg.label}", kind="${rg.kind}"`;
+      if (rg.prompt) {
+        line += `, description="${rg.prompt}"`;
+      }
+      return line;
+    })
     .join("\n");
 
   const illustrationLines = sections
@@ -97,17 +103,41 @@ export async function planIllustration(
     `Please produce a JSON object with exactly two keys:\n` +
     `1. "prompt" – a detailed image-generation prompt. ` +
     `Start the prompt with the illustration style above so every image is rendered consistently. ` +
-    `If any character reference graphics are available, mention the relevant characters by visual appearance ` +
-    `(not just name) so the image generator can render them consistently, and instruct the generator to ` +
-    `use the attached reference images for visual consistency.\n` +
+    `If any reference graphics are available, describe the relevant characters/scenes by their visual appearance ` +
+    `as described in the reference graphic descriptions and as shown in the attached reference images. ` +
+    `Use these visual references to ensure accurate character descriptions (species, colors, clothing, features) ` +
+    `in your prompt, and instruct the generator to use the attached reference images for visual consistency. ` +
+    `Do NOT guess or invent visual details that are not present in the reference descriptions or images.\n` +
     `2. "referenceImageIds" – an array of imageId strings from the reference graphics and/or existing illustrations above ` +
     `that should be sent as visual context to the image generator. Include only images that are relevant to this scene.\n\n` +
+    (refsWithImages.length > 0
+      ? `The reference graphic images are attached below, each preceded by a label. Study them carefully before writing the prompt.\n\n`
+      : ``) +
     `Respond ONLY with the JSON object, no extra text.`;
+
+  // Build multimodal parts: text message + reference images
+  const parts = [{ text: message }];
+
+  // Attach reference graphic images so the planning model can see them
+  const imgMap = allImages || {};
+  for (const rg of refsWithImages) {
+    const dataUrl = imgMap[rg.imageId];
+    if (dataUrl) {
+      parts.push({
+        text: `[Reference image: "${rg.label}" (${rg.kind}), imageId="${rg.imageId}"]`,
+      });
+      const base64 = dataUrl.split(",")[1];
+      const mimeType = dataUrl.split(";")[0].split(":")[1];
+      parts.push({
+        inlineData: { mimeType, data: base64 },
+      });
+    }
+  }
 
   const useModel = model || DEFAULT_TEXT_MODEL;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${apiKey}`;
   const body = {
-    contents: [{ parts: [{ text: message }] }],
+    contents: [{ parts }],
     generationConfig: { responseMimeType: "application/json" },
   };
 

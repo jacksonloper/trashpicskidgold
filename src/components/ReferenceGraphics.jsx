@@ -32,7 +32,8 @@ export default function ReferenceGraphics({
   };
 
   const handleGenerate = (rg) => {
-    const prompt = prompts[rg.id] || "";
+    const prompt =
+      prompts[rg.id] !== undefined ? prompts[rg.id] : rg.prompt || "";
     const model = imageModels[rg.id] || IMAGE_MODELS[0].id;
     if (prompt.trim()) onGenerate(rg.id, rg.kind, prompt, model);
   };
@@ -125,7 +126,11 @@ export default function ReferenceGraphics({
                       ? "Describe the character (e.g. a small round potato with a pug face)…"
                       : "Describe the image to generate…"
                   }
-                  value={prompts[rg.id] || ""}
+                  value={
+                    prompts[rg.id] !== undefined
+                      ? prompts[rg.id]
+                      : rg.prompt || ""
+                  }
                   onChange={(e) => handlePromptChange(rg.id, e.target.value)}
                 />
                 <div className="model-select-row">
@@ -149,7 +154,11 @@ export default function ReferenceGraphics({
                   disabled={
                     disabled ||
                     isGenerating ||
-                    !(prompts[rg.id] || "").trim()
+                    !(
+                      prompts[rg.id] !== undefined
+                        ? prompts[rg.id]
+                        : rg.prompt || ""
+                    ).trim()
                   }
                   onClick={() => handleGenerate(rg)}
                 >
