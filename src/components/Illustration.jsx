@@ -7,9 +7,8 @@ export default function Illustration({
   onCaptionChange,
   onPlanIllustration,
   onRemove,
-  disabled,
 }) {
-  const canPlan = !disabled && !generating && !planning && caption.trim().length > 0;
+  const canPlan = !generating && !planning && caption.trim().length > 0;
 
   return (
     <div className="card illustration-card">
@@ -45,10 +44,6 @@ export default function Illustration({
             ? "Generating…"
             : "🖼️ Generate Illustration"}
       </button>
-
-      {disabled && !generating && !planning && (
-        <p className="hint">Add at least one reference graphic first, or proceed without references.</p>
-      )}
 
       {imageUrl && (
         <div className="image-preview">

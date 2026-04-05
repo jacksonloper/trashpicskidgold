@@ -567,7 +567,6 @@ export default function App() {
                       }
                       onPlanIllustration={() => handlePlanIllustration(idx)}
                       onRemove={() => removeSection(idx)}
-                      disabled={false}
                     />
                   )
                 )}
