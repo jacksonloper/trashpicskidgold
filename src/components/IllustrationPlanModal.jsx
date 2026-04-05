@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { IMAGE_MODELS } from "../gemini";
 
 /**
  * Modal shown after the AI plans an illustration.
@@ -10,7 +11,7 @@ import { useState } from "react";
  *   allImages     – { imageId: dataUrl } map of all loaded images
  *   referenceGraphics – array of {id, label, imageId}
  *   sections      – story sections (for illustration images)
- *   onApprove(plan) – called with final { prompt, referenceImageIds }
+ *   onApprove(plan) – called with final { prompt, referenceImageIds, imageModel }
  *   onCancel()
  */
 export default function IllustrationPlanModal({
@@ -25,6 +26,7 @@ export default function IllustrationPlanModal({
   const [selectedIds, setSelectedIds] = useState(
     () => new Set(plan.referenceImageIds)
   );
+  const [imageModel, setImageModel] = useState(IMAGE_MODELS[0].id);
 
   // Build a list of all candidate images (ref graphics + existing illustrations)
   const candidates = [];
@@ -59,7 +61,7 @@ export default function IllustrationPlanModal({
   };
 
   const handleApprove = () => {
-    onApprove({ prompt, referenceImageIds: [...selectedIds] });
+    onApprove({ prompt, referenceImageIds: [...selectedIds], imageModel });
   };
 
   return (
@@ -99,6 +101,20 @@ export default function IllustrationPlanModal({
             </div>
           </>
         )}
+
+        <div className="plan-model-select">
+          <label className="plan-label">Image model</label>
+          <select
+            value={imageModel}
+            onChange={(e) => setImageModel(e.target.value)}
+          >
+            {IMAGE_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="plan-modal-buttons">
           <button

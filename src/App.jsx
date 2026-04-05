@@ -283,13 +283,13 @@ export default function App() {
   );
 
   const handleGenerateRefGraphic = useCallback(
-    async (rgId, kind, userPrompt) => {
+    async (rgId, kind, userPrompt, imageModel) => {
       if (!story) return;
       setError(null);
       setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
       try {
         const prompt = buildRefGraphicPrompt(style, kind, userPrompt);
-        const dataUrl = await generateImage(apiKey, prompt);
+        const dataUrl = await generateImage(apiKey, prompt, imageModel);
         const imgId = newImageId();
         await saveImage({
           id: imgId,
@@ -392,7 +392,7 @@ export default function App() {
   /* ---- illustration plan → approve → generate ---- */
 
   const handlePlanIllustration = useCallback(
-    async (idx) => {
+    async (idx, textModel) => {
       if (!story) return;
       setError(null);
       setPlanningSections((prev) => ({ ...prev, [idx]: true }));
@@ -404,7 +404,8 @@ export default function App() {
           style,
           referenceGraphics,
           sections,
-          caption
+          caption,
+          textModel
         );
         setIllustrationPlan({ idx, ...plan });
       } catch (err) {
@@ -439,7 +440,8 @@ export default function App() {
         const dataUrl = await generateImageWithReferences(
           apiKey,
           approvedPlan.prompt,
-          refImgs
+          refImgs,
+          approvedPlan.imageModel
         );
 
         const imgId = newImageId();
@@ -582,7 +584,7 @@ export default function App() {
                       onCaptionChange={(val) =>
                         updateSectionField(idx, "caption", val)
                       }
-                      onPlanIllustration={() => handlePlanIllustration(idx)}
+                      onPlanIllustration={(textModel) => handlePlanIllustration(idx, textModel)}
                       onRemove={() => removeSection(idx)}
                     />
                   )
