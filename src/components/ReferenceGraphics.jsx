@@ -35,7 +35,7 @@ export default function ReferenceGraphics({
     const prompt =
       prompts[rg.id] !== undefined ? prompts[rg.id] : rg.prompt || "";
     const model = imageModels[rg.id] || IMAGE_MODELS[0].id;
-    if (prompt.trim()) onGenerate(rg.id, rg.kind, prompt, model);
+    if (prompt.trim()) onGenerate(rg.id, rg.kind, prompt, model, rg.label);
   };
 
   const handleFileChange = (id, e) => {

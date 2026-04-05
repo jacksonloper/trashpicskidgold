@@ -283,12 +283,12 @@ export default function App() {
   );
 
   const handleGenerateRefGraphic = useCallback(
-    async (rgId, kind, userPrompt, imageModel) => {
+    async (rgId, kind, userPrompt, imageModel, label) => {
       if (!story) return;
       setError(null);
       setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
       try {
-        const prompt = buildRefGraphicPrompt(style, kind, userPrompt);
+        const prompt = buildRefGraphicPrompt(style, kind, userPrompt, label);
         const dataUrl = await generateImage(apiKey, prompt, imageModel);
         const imgId = newImageId();
         await saveImage({

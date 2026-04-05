@@ -19,17 +19,20 @@ export const TEXT_MODELS = [
  * @param {string} style        – the user's illustration style description
  * @param {"character"|"scene"|"other"} kind
  * @param {string} userPrompt   – what the user typed
+ * @param {string} [label]      – the reference graphic label (e.g. character name)
  * @returns {string}
  */
-export function buildRefGraphicPrompt(style, kind, userPrompt) {
+export function buildRefGraphicPrompt(style, kind, userPrompt, label) {
   if (kind === "character") {
+    const nameClause = label ? `The character's name is "${label}". ` : "";
     return (
       `${style}\n\n` +
       `Character model sheet with a clean white background. ` +
-      `Show the character(s) clearly labeled with their name below, ` +
-      `each shown from the front in a simple standing pose.\n\n` +
+      `${nameClause}` +
+      `Show the character from the front in a simple standing pose.\n\n` +
       `${userPrompt}\n\n` +
-      `Simple clean design, no background scenery, just the character(s) on white.`
+      `Simple clean design, no background scenery, just the character on white. ` +
+      `Do NOT include any text, labels, captions, or writing in the image.`
     );
   }
   if (kind === "scene") {
