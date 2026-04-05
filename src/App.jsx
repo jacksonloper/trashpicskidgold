@@ -4,14 +4,15 @@ import { hasRecentAgreement } from "./ageGateStore";
 import Navbar from "./components/Navbar";
 import ApiKeyInput from "./components/ApiKeyInput";
 import CharacterEditor from "./components/CharacterEditor";
+import ReferenceGraphics from "./components/ReferenceGraphics";
 import Illustration from "./components/Illustration";
+import IllustrationPlanModal from "./components/IllustrationPlanModal";
 import MarkdownSection from "./components/MarkdownSection";
 import ExportButtons from "./components/ExportButtons";
 import {
-  buildCharacterSheetPrompt,
-  buildIllustrationPrompt,
+  planIllustration,
   generateImage,
-  generateImageWithReference,
+  generateImageWithReferences,
 } from "./gemini";
 import {
   getApiKey,
@@ -25,6 +26,7 @@ import {
   newStoryId,
   newImageId,
   createBlankStory,
+  migrateStory,
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
 import "./App.css";
@@ -36,10 +38,11 @@ export default function App() {
   const [storyList, setStoryList] = useState([]); // [{id, title}]
   const [activeStoryId, setActiveStoryId] = useState(null);
   const [story, setStory] = useState(null); // full story record or null
-  const [charSheetUrl, setCharSheetUrl] = useState(null);
-  const [sectionImages, setSectionImages] = useState({}); // imageId → dataUrl
-  const [generatingSheet, setGeneratingSheet] = useState(false);
+  const [allImages, setAllImages] = useState({}); // imageId → dataUrl
+  const [generatingRefIds, setGeneratingRefIds] = useState({});
   const [generatingSections, setGeneratingSections] = useState({});
+  const [planningSections, setPlanningSections] = useState({});
+  const [illustrationPlan, setIllustrationPlan] = useState(null); // { idx, prompt, referenceImageIds }
   const [error, setError] = useState(null);
   const [ready, setReady] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
@@ -51,7 +54,10 @@ export default function App() {
 
   const characters = useMemo(() => story?.jsonblob?.characters ?? [], [story]);
   const sections = useMemo(() => story?.jsonblob?.sections ?? [], [story]);
-  const charSheetImageId = story?.jsonblob?.characterSheetImageId ?? null;
+  const referenceGraphics = useMemo(
+    () => story?.jsonblob?.referenceGraphics ?? [],
+    [story]
+  );
 
   /** Persist the story (debounced 500 ms). */
   const scheduleSave = useCallback(
@@ -111,33 +117,38 @@ export default function App() {
   useEffect(() => {
     if (!activeStoryId) {
       setStory(null);
-      setCharSheetUrl(null);
-      setSectionImages({});
+      setAllImages({});
       return;
     }
     let cancelled = false;
     (async () => {
-      const s = await getStory(activeStoryId);
+      let s = await getStory(activeStoryId);
       if (cancelled || !s) return;
+
+      // Migrate legacy stories
+      s = migrateStory(s);
+
       setStory(s);
 
-      // load character sheet image
-      if (s.jsonblob.characterSheetImageId) {
-        const rec = await getImage(s.jsonblob.characterSheetImageId);
-        if (!cancelled) setCharSheetUrl(rec?.data ?? null);
-      } else {
-        setCharSheetUrl(null);
+      // Load all images referenced by the story
+      const imgMap = {};
+
+      // Reference graphic images
+      for (const rg of s.jsonblob.referenceGraphics ?? []) {
+        if (rg.imageId) {
+          const rec = await getImage(rg.imageId);
+          if (rec) imgMap[rg.imageId] = rec.data;
+        }
       }
 
-      // load section images
-      const imgMap = {};
+      // Section illustration images
       for (const sec of s.jsonblob.sections) {
         if (sec.type === "illustration" && sec.imageId) {
           const rec = await getImage(sec.imageId);
           if (rec) imgMap[sec.imageId] = rec.data;
         }
       }
-      if (!cancelled) setSectionImages(imgMap);
+      if (!cancelled) setAllImages(imgMap);
     })();
     return () => {
       cancelled = true;
@@ -160,8 +171,7 @@ export default function App() {
     const remaining = storyList.filter((s) => s.id !== activeStoryId);
     setStoryList(remaining);
     setStory(null);
-    setCharSheetUrl(null);
-    setSectionImages({});
+    setAllImages({});
     setActiveStoryId(remaining.length > 0 ? remaining[0].id : null);
   }, [activeStoryId, storyList]);
 
@@ -213,36 +223,113 @@ export default function App() {
     [updateStory]
   );
 
-  /* ---- character sheet ---- */
+  /* ---- reference graphics ---- */
 
-  const handleGenerateSheet = useCallback(async () => {
-    if (!story) return;
-    setError(null);
-    setGeneratingSheet(true);
-    try {
-      const prompt = buildCharacterSheetPrompt(characters);
-      const dataUrl = await generateImage(apiKey, prompt);
+  const handleAddRefGraphic = useCallback(() => {
+    const id = crypto.randomUUID();
+    updateStory((s) => ({
+      ...s,
+      jsonblob: {
+        ...s.jsonblob,
+        referenceGraphics: [
+          ...s.jsonblob.referenceGraphics,
+          { id, label: "", imageId: null },
+        ],
+      },
+    }));
+  }, [updateStory]);
 
-      const imgId = newImageId();
-      await saveImage({
-        id: imgId,
-        storyId: story.id,
-        caption: "Character sheet",
-        data: dataUrl,
-        characterReferenceId: null,
-      });
-      setCharSheetUrl(dataUrl);
-
+  const handleRemoveRefGraphic = useCallback(
+    (rgId) =>
       updateStory((s) => ({
         ...s,
-        jsonblob: { ...s.jsonblob, characterSheetImageId: imgId },
-      }));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setGeneratingSheet(false);
-    }
-  }, [apiKey, characters, story, updateStory]);
+        jsonblob: {
+          ...s.jsonblob,
+          referenceGraphics: s.jsonblob.referenceGraphics.filter(
+            (rg) => rg.id !== rgId
+          ),
+        },
+      })),
+    [updateStory]
+  );
+
+  const handleUpdateRefLabel = useCallback(
+    (rgId, label) =>
+      updateStory((s) => ({
+        ...s,
+        jsonblob: {
+          ...s.jsonblob,
+          referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
+            rg.id === rgId ? { ...rg, label } : rg
+          ),
+        },
+      })),
+    [updateStory]
+  );
+
+  const handleGenerateRefGraphic = useCallback(
+    async (rgId, prompt) => {
+      if (!story) return;
+      setError(null);
+      setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
+      try {
+        const dataUrl = await generateImage(apiKey, prompt);
+        const imgId = newImageId();
+        await saveImage({
+          id: imgId,
+          storyId: story.id,
+          caption: prompt.slice(0, 120),
+          data: dataUrl,
+        });
+        setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
+
+        updateStory((s) => ({
+          ...s,
+          jsonblob: {
+            ...s.jsonblob,
+            referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
+              rg.id === rgId ? { ...rg, imageId: imgId } : rg
+            ),
+          },
+        }));
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setGeneratingRefIds((prev) => ({ ...prev, [rgId]: false }));
+      }
+    },
+    [apiKey, story, updateStory]
+  );
+
+  const handleUploadRefGraphic = useCallback(
+    async (rgId, dataUrl) => {
+      if (!story) return;
+      setError(null);
+      try {
+        const imgId = newImageId();
+        await saveImage({
+          id: imgId,
+          storyId: story.id,
+          caption: "Uploaded reference",
+          data: dataUrl,
+        });
+        setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
+
+        updateStory((s) => ({
+          ...s,
+          jsonblob: {
+            ...s.jsonblob,
+            referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
+              rg.id === rgId ? { ...rg, imageId: imgId } : rg
+            ),
+          },
+        }));
+      } catch (err) {
+        setError(err.message);
+      }
+    },
+    [story, updateStory]
+  );
 
   /* ---- sections ---- */
 
@@ -286,36 +373,69 @@ export default function App() {
     [updateStory]
   );
 
-  const handleGenerateIllustration = useCallback(
+  /* ---- illustration plan → approve → generate ---- */
+
+  const handlePlanIllustration = useCallback(
     async (idx) => {
+      if (!story) return;
+      setError(null);
+      setPlanningSections((prev) => ({ ...prev, [idx]: true }));
+
+      try {
+        const caption = sections[idx]?.caption;
+        const plan = await planIllustration(
+          apiKey,
+          characters,
+          referenceGraphics,
+          sections,
+          caption
+        );
+        setIllustrationPlan({ idx, ...plan });
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setPlanningSections((prev) => ({ ...prev, [idx]: false }));
+      }
+    },
+    [apiKey, characters, referenceGraphics, sections, story]
+  );
+
+  const handleApproveIllustration = useCallback(
+    async (approvedPlan) => {
+      const idx = illustrationPlan.idx;
+      setIllustrationPlan(null);
       if (!story) return;
       setError(null);
       setGeneratingSections((prev) => ({ ...prev, [idx]: true }));
 
       try {
-        const caption = sections[idx]?.caption;
-        const prompt = buildIllustrationPrompt(characters, caption);
+        // Collect reference images from approved plan
+        const refImgs = [];
+        for (const imgId of approvedPlan.referenceImageIds) {
+          const dataUrl = allImages[imgId];
+          if (dataUrl) {
+            const base64 = dataUrl.split(",")[1];
+            const mimeType = dataUrl.split(";")[0].split(":")[1];
+            refImgs.push({ base64, mimeType });
+          }
+        }
 
-        const base64 = charSheetUrl.split(",")[1];
-        const mimeType = charSheetUrl.split(";")[0].split(":")[1];
-
-        const dataUrl = await generateImageWithReference(
+        const dataUrl = await generateImageWithReferences(
           apiKey,
-          prompt,
-          base64,
-          mimeType
+          approvedPlan.prompt,
+          refImgs
         );
 
         const imgId = newImageId();
+        const caption = sections[idx]?.caption;
         await saveImage({
           id: imgId,
           storyId: story.id,
           caption,
           data: dataUrl,
-          characterReferenceId: charSheetImageId,
         });
 
-        setSectionImages((prev) => ({ ...prev, [imgId]: dataUrl }));
+        setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
         updateSectionField(idx, "imageId", imgId);
       } catch (err) {
         setError(err.message);
@@ -325,14 +445,15 @@ export default function App() {
     },
     [
       apiKey,
-      characters,
-      charSheetUrl,
-      charSheetImageId,
+      allImages,
+      illustrationPlan,
       sections,
       story,
       updateSectionField,
     ]
   );
+
+  const handleCancelPlan = useCallback(() => setIllustrationPlan(null), []);
 
   /* ---- render ---- */
 
@@ -397,9 +518,18 @@ export default function App() {
               <CharacterEditor
                 characters={characters}
                 onCharactersChange={handleCharactersChange}
-                onGenerate={handleGenerateSheet}
-                characterSheetUrl={charSheetUrl}
-                generating={generatingSheet}
+              />
+
+              {/* Reference Graphics */}
+              <ReferenceGraphics
+                referenceGraphics={referenceGraphics}
+                refImages={allImages}
+                onAdd={handleAddRefGraphic}
+                onRemove={handleRemoveRefGraphic}
+                onUpdateLabel={handleUpdateRefLabel}
+                onGenerate={handleGenerateRefGraphic}
+                onUpload={handleUploadRefGraphic}
+                generatingIds={generatingRefIds}
                 disabled={!apiKey.trim()}
               />
 
@@ -408,7 +538,7 @@ export default function App() {
                 <h2>📚 Story Sections</h2>
                 <p className="section-description">
                   Add text blocks and illustration pages. The AI uses your
-                  character sheet to keep characters consistent.
+                  reference graphics to keep characters consistent.
                 </p>
 
                 {sections.map((sec, idx) =>
@@ -428,15 +558,16 @@ export default function App() {
                       index={idx}
                       caption={sec.caption}
                       imageUrl={
-                        sec.imageId ? sectionImages[sec.imageId] ?? null : null
+                        sec.imageId ? allImages[sec.imageId] ?? null : null
                       }
                       generating={!!generatingSections[idx]}
+                      planning={!!planningSections[idx]}
                       onCaptionChange={(val) =>
                         updateSectionField(idx, "caption", val)
                       }
-                      onGenerate={() => handleGenerateIllustration(idx)}
+                      onPlanIllustration={() => handlePlanIllustration(idx)}
                       onRemove={() => removeSection(idx)}
-                      disabled={!charSheetUrl}
+                      disabled={false}
                     />
                   )
                 )}
@@ -478,6 +609,18 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Illustration plan approval modal */}
+      {illustrationPlan && (
+        <IllustrationPlanModal
+          plan={illustrationPlan}
+          allImages={allImages}
+          referenceGraphics={referenceGraphics}
+          sections={sections}
+          onApprove={handleApproveIllustration}
+          onCancel={handleCancelPlan}
+        />
+      )}
     </div>
   );
 }

@@ -118,7 +118,13 @@ export async function loadExampleStory() {
     title: "The Lost Star",
     jsonblob: {
       characters: CHARACTERS,
-      characterSheetImageId: charSheetImgId,
+      referenceGraphics: [
+        {
+          id: crypto.randomUUID(),
+          label: "Character Sheet",
+          imageId: charSheetImgId,
+        },
+      ],
       sections: builtSections,
     },
   };

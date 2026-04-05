@@ -5,10 +5,6 @@ const emptyChar = () => ({ name: "", description: "" });
 export default function CharacterEditor({
   characters,
   onCharactersChange,
-  onGenerate,
-  characterSheetUrl,
-  generating,
-  disabled,
 }) {
   const addCharacter = () => {
     if (characters.length < MAX_CHARACTERS) {
@@ -27,15 +23,9 @@ export default function CharacterEditor({
     onCharactersChange(updated);
   };
 
-  const canGenerate =
-    !disabled &&
-    !generating &&
-    characters.length > 0 &&
-    characters.every((c) => c.name.trim() && c.description.trim());
-
   return (
     <section className="card">
-      <h2>📝 Character Sheet</h2>
+      <h2>📝 Characters</h2>
       <p className="section-description">
         Define up to {MAX_CHARACTERS} characters for your story. Give each a
         name and a fun description.
@@ -74,23 +64,6 @@ export default function CharacterEditor({
         <button type="button" className="btn-secondary" onClick={addCharacter}>
           + Add Character
         </button>
-      )}
-
-      <div className="generate-row">
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={!canGenerate}
-          onClick={onGenerate}
-        >
-          {generating ? "Generating…" : "🎨 Generate Character Sheet"}
-        </button>
-      </div>
-
-      {characterSheetUrl && (
-        <div className="image-preview">
-          <img src={characterSheetUrl} alt="Character sheet" />
-        </div>
       )}
     </section>
   );

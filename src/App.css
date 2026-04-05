@@ -373,3 +373,127 @@
   z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
+
+/* ---- Reference Graphics ---- */
+
+.ref-graphic-card {
+  margin-bottom: 1rem;
+  background: #f3f8ff;
+  border: 1px dashed #90b4de;
+}
+
+.ref-graphic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ref-graphic-label {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.ref-graphic-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.ref-upload-label {
+  cursor: pointer;
+}
+
+.ref-graphic-prompt-area {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ---- Plan Modal ---- */
+
+.plan-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.plan-modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: 2rem 2.5rem;
+  max-width: 640px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.plan-modal h3 {
+  margin-top: 0;
+}
+
+.plan-label {
+  display: block;
+  font-weight: 600;
+  margin: 1rem 0 0.35rem;
+}
+
+.plan-prompt-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.plan-ref-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.plan-ref-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  max-width: 120px;
+  text-align: center;
+}
+
+.plan-ref-item input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.plan-ref-thumb {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.plan-ref-caption {
+  font-size: 0.75rem;
+  color: #666;
+  word-break: break-word;
+}
+
+.plan-modal-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}

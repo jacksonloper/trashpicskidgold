@@ -104,9 +104,34 @@ export function createBlankStory(id) {
     title: "Untitled Story",
     jsonblob: {
       characters: [{ name: "", description: "" }],
-      characterSheetImageId: null,
+      referenceGraphics: [],
       sections: [],
     },
+  };
+}
+
+/**
+ * Migrate a legacy story that uses characterSheetImageId to the new
+ * referenceGraphics format.  Returns a new object if migration was needed,
+ * or the original if it was already current.
+ */
+export function migrateStory(story) {
+  const blob = story.jsonblob;
+  if (blob.referenceGraphics) return story; // already migrated
+
+  const referenceGraphics = [];
+  if (blob.characterSheetImageId) {
+    referenceGraphics.push({
+      id: crypto.randomUUID(),
+      label: "Character Sheet",
+      imageId: blob.characterSheetImageId,
+    });
+  }
+
+  const { characterSheetImageId: _removed, ...restBlob } = blob;
+  return {
+    ...story,
+    jsonblob: { ...restBlob, referenceGraphics },
   };
 }
 

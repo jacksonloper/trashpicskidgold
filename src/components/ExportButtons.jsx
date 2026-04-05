@@ -25,7 +25,15 @@ function extensionForMime(mime) {
 async function loadStoryImageMap(story) {
   const ids = new Set();
   const blob = story.jsonblob;
+
+  // Reference graphic images
+  for (const rg of blob.referenceGraphics ?? []) {
+    if (rg.imageId) ids.add(rg.imageId);
+  }
+
+  // Legacy support
   if (blob.characterSheetImageId) ids.add(blob.characterSheetImageId);
+
   for (const sec of blob.sections) {
     if (sec.type === "illustration" && sec.imageId) ids.add(sec.imageId);
   }
@@ -44,6 +52,17 @@ function buildMarkdown(story, imageFiles) {
   const blob = story.jsonblob;
   const lines = [`# ${story.title}`, ""];
 
+  // Reference graphics
+  for (const rg of blob.referenceGraphics ?? []) {
+    if (rg.imageId && imageFiles[rg.imageId]) {
+      lines.push(
+        `![${rg.label || "Reference graphic"}](images/${imageFiles[rg.imageId]})`,
+        ""
+      );
+    }
+  }
+
+  // Legacy character sheet
   if (blob.characterSheetImageId && imageFiles[blob.characterSheetImageId]) {
     lines.push(
       `![Character Sheet](images/${imageFiles[blob.characterSheetImageId]})`,
@@ -109,6 +128,14 @@ async function exportToHtml(story) {
 
   let body = `<h1>${escHtml(story.title)}</h1>\n`;
 
+  // Reference graphics
+  for (const rg of blob.referenceGraphics ?? []) {
+    if (rg.imageId && imageMap[rg.imageId]) {
+      body += `<div class="img-wrap"><img src="${imageMap[rg.imageId].data}" alt="${escHtml(rg.label || "Reference graphic")}"></div>\n`;
+    }
+  }
+
+  // Legacy character sheet
   if (blob.characterSheetImageId && imageMap[blob.characterSheetImageId]) {
     body += `<div class="img-wrap"><img src="${imageMap[blob.characterSheetImageId].data}" alt="Character Sheet"></div>\n`;
   }
