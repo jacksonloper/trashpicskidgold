@@ -3,13 +3,14 @@ import AgeGate from "./components/AgeGate";
 import { hasRecentAgreement } from "./ageGateStore";
 import Navbar from "./components/Navbar";
 import ApiKeyInput from "./components/ApiKeyInput";
-import CharacterEditor from "./components/CharacterEditor";
+import StyleEditor from "./components/StyleEditor";
 import ReferenceGraphics from "./components/ReferenceGraphics";
 import Illustration from "./components/Illustration";
 import IllustrationPlanModal from "./components/IllustrationPlanModal";
 import MarkdownSection from "./components/MarkdownSection";
 import ExportButtons from "./components/ExportButtons";
 import {
+  buildRefGraphicPrompt,
   planIllustration,
   generateImage,
   generateImageWithReferences,
@@ -52,7 +53,7 @@ export default function App() {
 
   /* ---- helpers ---- */
 
-  const characters = useMemo(() => story?.jsonblob?.characters ?? [], [story]);
+  const style = useMemo(() => story?.jsonblob?.style ?? "", [story]);
   const sections = useMemo(() => story?.jsonblob?.sections ?? [], [story]);
   const referenceGraphics = useMemo(
     () => story?.jsonblob?.referenceGraphics ?? [],
@@ -212,13 +213,13 @@ export default function App() {
     [updateStory]
   );
 
-  /* ---- characters ---- */
+  /* ---- style ---- */
 
-  const handleCharactersChange = useCallback(
-    (chars) =>
+  const handleStyleChange = useCallback(
+    (val) =>
       updateStory((s) => ({
         ...s,
-        jsonblob: { ...s.jsonblob, characters: chars },
+        jsonblob: { ...s.jsonblob, style: val },
       })),
     [updateStory]
   );
@@ -233,7 +234,7 @@ export default function App() {
         ...s.jsonblob,
         referenceGraphics: [
           ...s.jsonblob.referenceGraphics,
-          { id, label: "", imageId: null },
+          { id, label: "", kind: "character", imageId: null },
         ],
       },
     }));
@@ -267,18 +268,33 @@ export default function App() {
     [updateStory]
   );
 
+  const handleUpdateRefKind = useCallback(
+    (rgId, kind) =>
+      updateStory((s) => ({
+        ...s,
+        jsonblob: {
+          ...s.jsonblob,
+          referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
+            rg.id === rgId ? { ...rg, kind } : rg
+          ),
+        },
+      })),
+    [updateStory]
+  );
+
   const handleGenerateRefGraphic = useCallback(
-    async (rgId, prompt) => {
+    async (rgId, kind, userPrompt) => {
       if (!story) return;
       setError(null);
       setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
       try {
+        const prompt = buildRefGraphicPrompt(style, kind, userPrompt);
         const dataUrl = await generateImage(apiKey, prompt);
         const imgId = newImageId();
         await saveImage({
           id: imgId,
           storyId: story.id,
-          caption: prompt.slice(0, 120),
+          caption: userPrompt.slice(0, 120),
           data: dataUrl,
         });
         setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
@@ -298,7 +314,7 @@ export default function App() {
         setGeneratingRefIds((prev) => ({ ...prev, [rgId]: false }));
       }
     },
-    [apiKey, story, updateStory]
+    [apiKey, style, story, updateStory]
   );
 
   const handleUploadRefGraphic = useCallback(
@@ -385,7 +401,7 @@ export default function App() {
         const caption = sections[idx]?.caption;
         const plan = await planIllustration(
           apiKey,
-          characters,
+          style,
           referenceGraphics,
           sections,
           caption
@@ -397,7 +413,7 @@ export default function App() {
         setPlanningSections((prev) => ({ ...prev, [idx]: false }));
       }
     },
-    [apiKey, characters, referenceGraphics, sections, story]
+    [apiKey, style, referenceGraphics, sections, story]
   );
 
   const handleApproveIllustration = useCallback(
@@ -514,10 +530,10 @@ export default function App() {
                 />
               </section>
 
-              {/* Character editor */}
-              <CharacterEditor
-                characters={characters}
-                onCharactersChange={handleCharactersChange}
+              {/* Style editor */}
+              <StyleEditor
+                style={style}
+                onStyleChange={handleStyleChange}
               />
 
               {/* Reference Graphics */}
@@ -527,6 +543,7 @@ export default function App() {
                 onAdd={handleAddRefGraphic}
                 onRemove={handleRemoveRefGraphic}
                 onUpdateLabel={handleUpdateRefLabel}
+                onUpdateKind={handleUpdateRefKind}
                 onGenerate={handleGenerateRefGraphic}
                 onUpload={handleUploadRefGraphic}
                 generatingIds={generatingRefIds}

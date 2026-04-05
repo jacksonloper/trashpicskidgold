@@ -374,6 +374,12 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* ---- Style Editor ---- */
+
+.style-input {
+  min-height: 80px;
+}
+
 /* ---- Reference Graphics ---- */
 
 .ref-graphic-card {
@@ -388,6 +394,14 @@
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
+}
+
+.ref-graphic-kind {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: #fff;
 }
 
 .ref-graphic-label {

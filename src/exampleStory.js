@@ -11,6 +11,7 @@ import {
   newImageId,
   saveStory,
   saveImage,
+  DEFAULT_STYLE,
 } from "./db";
 
 const CHARACTERS = [
@@ -117,11 +118,12 @@ export async function loadExampleStory() {
     id: storyId,
     title: "The Lost Star",
     jsonblob: {
-      characters: CHARACTERS,
+      style: DEFAULT_STYLE,
       referenceGraphics: [
         {
           id: crypto.randomUUID(),
-          label: "Character Sheet",
+          label: CHARACTERS.map((c) => c.name).join(", ") + " – Character Sheet",
+          kind: "character",
           imageId: charSheetImgId,
         },
       ],

@@ -95,6 +95,9 @@ export function newImageId() {
   return crypto.randomUUID();
 }
 
+export const DEFAULT_STYLE =
+  "Children's book illustration in a warm, whimsical watercolor style with soft edges and bright cheerful colors. Simple, rounded shapes suitable for ages 4-7.";
+
 /**
  * Create a blank story object (not yet persisted).
  */
@@ -103,7 +106,7 @@ export function createBlankStory(id) {
     id,
     title: "Untitled Story",
     jsonblob: {
-      characters: [{ name: "", description: "" }],
+      style: DEFAULT_STYLE,
       referenceGraphics: [],
       sections: [],
     },
@@ -111,28 +114,54 @@ export function createBlankStory(id) {
 }
 
 /**
- * Migrate a legacy story that uses characterSheetImageId to the new
- * referenceGraphics format.  Returns a new object if migration was needed,
- * or the original if it was already current.
+ * Migrate a legacy story to the current format.
+ *
+ * Handles:
+ *  - characterSheetImageId → referenceGraphics array  (v1 → v2)
+ *  - characters array → dropped; style field added    (v2 → v3)
+ *
+ * Returns a new object if migration was needed, or the original if already current.
  */
 export function migrateStory(story) {
-  const blob = story.jsonblob;
-  if (blob.referenceGraphics) return story; // already migrated
+  let blob = story.jsonblob;
+  let changed = false;
 
-  const referenceGraphics = [];
-  if (blob.characterSheetImageId) {
-    referenceGraphics.push({
-      id: crypto.randomUUID(),
-      label: "Character Sheet",
-      imageId: blob.characterSheetImageId,
-    });
+  // v1 → v2: characterSheetImageId → referenceGraphics
+  if (!blob.referenceGraphics) {
+    const referenceGraphics = [];
+    if (blob.characterSheetImageId) {
+      referenceGraphics.push({
+        id: crypto.randomUUID(),
+        label: "Character Sheet",
+        kind: "character",
+        imageId: blob.characterSheetImageId,
+      });
+    }
+    const { characterSheetImageId: _removed, ...rest } = blob;
+    blob = { ...rest, referenceGraphics };
+    changed = true;
   }
 
-  const { characterSheetImageId: _removed, ...restBlob } = blob;
-  return {
-    ...story,
-    jsonblob: { ...restBlob, referenceGraphics },
-  };
+  // v2 → v3: drop characters, ensure style exists, ensure kind on ref graphics
+  if (!blob.style) {
+    const { characters: _chars, ...rest } = blob;
+    blob = { ...rest, style: DEFAULT_STYLE };
+    changed = true;
+  }
+
+  // Ensure every referenceGraphic has a kind
+  const needsKind = (blob.referenceGraphics ?? []).some((rg) => !rg.kind);
+  if (needsKind) {
+    blob = {
+      ...blob,
+      referenceGraphics: blob.referenceGraphics.map((rg) =>
+        rg.kind ? rg : { ...rg, kind: "other" }
+      ),
+    };
+    changed = true;
+  }
+
+  return changed ? { ...story, jsonblob: blob } : story;
 }
 
 export async function listStories() {

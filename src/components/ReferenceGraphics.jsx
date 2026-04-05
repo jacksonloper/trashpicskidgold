@@ -1,11 +1,18 @@
 import { useState } from "react";
 
+const KIND_OPTIONS = [
+  { value: "character", label: "🧑 Character" },
+  { value: "scene", label: "🏞️ Scene" },
+  { value: "other", label: "📎 Other" },
+];
+
 export default function ReferenceGraphics({
   referenceGraphics,
   refImages,
   onAdd,
   onRemove,
   onUpdateLabel,
+  onUpdateKind,
   onGenerate,
   onUpload,
   generatingIds,
@@ -18,9 +25,9 @@ export default function ReferenceGraphics({
     setPrompts((prev) => ({ ...prev, [id]: value }));
   };
 
-  const handleGenerate = (id) => {
-    const prompt = prompts[id] || "";
-    if (prompt.trim()) onGenerate(id, prompt);
+  const handleGenerate = (rg) => {
+    const prompt = prompts[rg.id] || "";
+    if (prompt.trim()) onGenerate(rg.id, rg.kind, prompt);
   };
 
   const handleFileChange = (id, e) => {
@@ -35,8 +42,8 @@ export default function ReferenceGraphics({
     <section className="card">
       <h2>🖼️ Reference Graphics</h2>
       <p className="section-description">
-        Add reference images (character sheets, style guides, props, etc.) for
-        the AI to use when illustrating your story.
+        Add reference images (character sheets, scene references, style guides,
+        etc.) for the AI to use when illustrating your story.
       </p>
 
       {referenceGraphics.map((rg) => {
@@ -47,10 +54,21 @@ export default function ReferenceGraphics({
         return (
           <div key={rg.id} className="ref-graphic-card card">
             <div className="ref-graphic-header">
+              <select
+                className="ref-graphic-kind"
+                value={rg.kind}
+                onChange={(e) => onUpdateKind(rg.id, e.target.value)}
+              >
+                {KIND_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
               <input
                 type="text"
                 className="ref-graphic-label"
-                placeholder="Label (e.g. Character Sheet, Background Style)"
+                placeholder="Label (e.g. Luna the Fox, Forest Background)"
                 value={rg.label}
                 onChange={(e) => onUpdateLabel(rg.id, e.target.value)}
               />
@@ -95,7 +113,11 @@ export default function ReferenceGraphics({
                 <textarea
                   className="markdown-input"
                   rows={3}
-                  placeholder="Describe the image to generate…"
+                  placeholder={
+                    rg.kind === "character"
+                      ? "Describe the character (e.g. a small round potato with a pug face)…"
+                      : "Describe the image to generate…"
+                  }
                   value={prompts[rg.id] || ""}
                   onChange={(e) => handlePromptChange(rg.id, e.target.value)}
                 />
@@ -107,7 +129,7 @@ export default function ReferenceGraphics({
                     isGenerating ||
                     !(prompts[rg.id] || "").trim()
                   }
-                  onClick={() => handleGenerate(rg.id)}
+                  onClick={() => handleGenerate(rg)}
                 >
                   {isGenerating ? "Generating…" : "🎨 Generate"}
                 </button>
