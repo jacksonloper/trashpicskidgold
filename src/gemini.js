@@ -1,4 +1,17 @@
-const MODEL = "gemini-3-pro-image-preview";
+const DEFAULT_IMAGE_MODEL = "gemini-3-pro-image-preview";
+const DEFAULT_TEXT_MODEL = "gemini-3-pro-image-preview";
+
+/** Model options for image generation. */
+export const IMAGE_MODELS = [
+  { id: "gemini-3-pro-image-preview", label: "Quality (slower)" },
+  { id: "gemini-2.5-flash-image", label: "Fast" },
+];
+
+/** Model options for text-based planning. */
+export const TEXT_MODELS = [
+  { id: "gemini-3-pro-image-preview", label: "Quality (slower)" },
+  { id: "gemini-2.5-flash", label: "Fast" },
+];
 
 /**
  * Build the complete prompt for generating a reference graphic.
@@ -41,6 +54,7 @@ export function buildRefGraphicPrompt(style, kind, userPrompt) {
  * @param {Array<{id:string, label:string, kind:string, imageId:string|null}>} referenceGraphics
  * @param {Array} sections       – story sections
  * @param {string} targetCaption – the caption for the illustration to generate
+ * @param {string} [model]      – Gemini model to use (defaults to quality)
  * @returns {Promise<{prompt:string, referenceImageIds:string[]}>}
  */
 export async function planIllustration(
@@ -48,7 +62,8 @@ export async function planIllustration(
   style,
   referenceGraphics,
   sections,
-  targetCaption
+  targetCaption,
+  model
 ) {
   const storyText = sections
     .map((s) => {
@@ -89,7 +104,8 @@ export async function planIllustration(
     `that should be sent as visual context to the image generator. Include only images that are relevant to this scene.\n\n` +
     `Respond ONLY with the JSON object, no extra text.`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+  const useModel = model || DEFAULT_TEXT_MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${apiKey}`;
   const body = {
     contents: [{ parts: [{ text: message }] }],
     generationConfig: { responseMimeType: "application/json" },
@@ -130,10 +146,12 @@ export async function planIllustration(
  * Returns a base64 PNG data URL.
  * @param {string} apiKey
  * @param {string} prompt
+ * @param {string} [model] – Gemini model to use (defaults to quality)
  * @returns {Promise<string>} data URL
  */
-export async function generateImage(apiKey, prompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+export async function generateImage(apiKey, prompt, model) {
+  const useModel = model || DEFAULT_IMAGE_MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${apiKey}`;
 
   const body = {
     contents: [
@@ -168,15 +186,18 @@ export async function generateImage(apiKey, prompt) {
  * @param {string} prompt
  * @param {string} referenceImageBase64  base64 encoded image (no data-url prefix)
  * @param {string} mimeType
+ * @param {string} [model] – Gemini model to use (defaults to quality)
  * @returns {Promise<string>} data URL
  */
 export async function generateImageWithReference(
   apiKey,
   prompt,
   referenceImageBase64,
-  mimeType = "image/png"
+  mimeType = "image/png",
+  model
 ) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+  const useModel = model || DEFAULT_IMAGE_MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${apiKey}`;
 
   const body = {
     contents: [
@@ -220,14 +241,17 @@ export async function generateImageWithReference(
  * @param {string} apiKey
  * @param {string} prompt
  * @param {Array<{base64:string, mimeType:string}>} referenceImages
+ * @param {string} [model] – Gemini model to use (defaults to quality)
  * @returns {Promise<string>} data URL
  */
 export async function generateImageWithReferences(
   apiKey,
   prompt,
-  referenceImages = []
+  referenceImages = [],
+  model
 ) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+  const useModel = model || DEFAULT_IMAGE_MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${apiKey}`;
 
   const parts = [{ text: prompt }];
   for (const img of referenceImages) {

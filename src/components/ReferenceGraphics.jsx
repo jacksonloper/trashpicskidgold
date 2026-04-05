@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { IMAGE_MODELS } from "../gemini";
 
 const KIND_OPTIONS = [
   { value: "character", label: "🧑 Character" },
@@ -20,14 +21,20 @@ export default function ReferenceGraphics({
 }) {
   const [expandedId, setExpandedId] = useState(null);
   const [prompts, setPrompts] = useState({});
+  const [imageModels, setImageModels] = useState({});
 
   const handlePromptChange = (id, value) => {
     setPrompts((prev) => ({ ...prev, [id]: value }));
   };
 
+  const handleModelChange = (id, value) => {
+    setImageModels((prev) => ({ ...prev, [id]: value }));
+  };
+
   const handleGenerate = (rg) => {
     const prompt = prompts[rg.id] || "";
-    if (prompt.trim()) onGenerate(rg.id, rg.kind, prompt);
+    const model = imageModels[rg.id] || IMAGE_MODELS[0].id;
+    if (prompt.trim()) onGenerate(rg.id, rg.kind, prompt, model);
   };
 
   const handleFileChange = (id, e) => {
@@ -121,6 +128,21 @@ export default function ReferenceGraphics({
                   value={prompts[rg.id] || ""}
                   onChange={(e) => handlePromptChange(rg.id, e.target.value)}
                 />
+                <div className="model-select-row">
+                  <label className="model-select-label">
+                    Image model
+                    <select
+                      value={imageModels[rg.id] || IMAGE_MODELS[0].id}
+                      onChange={(e) => handleModelChange(rg.id, e.target.value)}
+                    >
+                      {IMAGE_MODELS.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 <button
                   type="button"
                   className="btn-primary"

@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { TEXT_MODELS } from "../gemini";
+
 export default function Illustration({
   index,
   caption,
@@ -8,6 +11,7 @@ export default function Illustration({
   onPlanIllustration,
   onRemove,
 }) {
+  const [textModel, setTextModel] = useState(TEXT_MODELS[0].id);
   const canPlan = !generating && !planning && caption.trim().length > 0;
 
   return (
@@ -32,11 +36,27 @@ export default function Illustration({
         onChange={(e) => onCaptionChange(e.target.value)}
       />
 
+      <div className="model-select-row">
+        <label className="model-select-label">
+          Planning model
+          <select
+            value={textModel}
+            onChange={(e) => setTextModel(e.target.value)}
+          >
+            {TEXT_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       <button
         type="button"
         className="btn-primary"
         disabled={!canPlan}
-        onClick={onPlanIllustration}
+        onClick={() => onPlanIllustration(textModel)}
       >
         {planning
           ? "Planning…"
