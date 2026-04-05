@@ -3,12 +3,12 @@ export default function Illustration({
   caption,
   imageUrl,
   generating,
+  planning,
   onCaptionChange,
-  onGenerate,
+  onPlanIllustration,
   onRemove,
-  disabled,
 }) {
-  const canGenerate = !disabled && !generating && caption.trim().length > 0;
+  const canPlan = !generating && !planning && caption.trim().length > 0;
 
   return (
     <div className="card illustration-card">
@@ -35,15 +35,15 @@ export default function Illustration({
       <button
         type="button"
         className="btn-primary"
-        disabled={!canGenerate}
-        onClick={onGenerate}
+        disabled={!canPlan}
+        onClick={onPlanIllustration}
       >
-        {generating ? "Generating…" : "🖼️ Generate Illustration"}
+        {planning
+          ? "Planning…"
+          : generating
+            ? "Generating…"
+            : "🖼️ Generate Illustration"}
       </button>
-
-      {disabled && !generating && (
-        <p className="hint">Generate the character sheet first.</p>
-      )}
 
       {imageUrl && (
         <div className="image-preview">
