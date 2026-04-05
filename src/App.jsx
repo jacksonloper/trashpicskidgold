@@ -234,7 +234,7 @@ export default function App() {
         ...s.jsonblob,
         referenceGraphics: [
           ...s.jsonblob.referenceGraphics,
-          { id, label: "", kind: "character", imageId: null },
+          { id, label: "", kind: "character", imageId: null, prompt: "" },
         ],
       },
     }));
@@ -283,12 +283,12 @@ export default function App() {
   );
 
   const handleGenerateRefGraphic = useCallback(
-    async (rgId, kind, userPrompt, imageModel) => {
+    async (rgId, kind, userPrompt, imageModel, label) => {
       if (!story) return;
       setError(null);
       setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
       try {
-        const prompt = buildRefGraphicPrompt(style, kind, userPrompt);
+        const prompt = buildRefGraphicPrompt(style, kind, userPrompt, label);
         const dataUrl = await generateImage(apiKey, prompt, imageModel);
         const imgId = newImageId();
         await saveImage({
@@ -304,7 +304,9 @@ export default function App() {
           jsonblob: {
             ...s.jsonblob,
             referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
-              rg.id === rgId ? { ...rg, imageId: imgId } : rg
+              rg.id === rgId
+                ? { ...rg, imageId: imgId, prompt: userPrompt }
+                : rg
             ),
           },
         }));
@@ -405,6 +407,7 @@ export default function App() {
           referenceGraphics,
           sections,
           caption,
+          allImages,
           textModel
         );
         setIllustrationPlan({ idx, ...plan });
@@ -414,7 +417,7 @@ export default function App() {
         setPlanningSections((prev) => ({ ...prev, [idx]: false }));
       }
     },
-    [apiKey, style, referenceGraphics, sections, story]
+    [apiKey, allImages, style, referenceGraphics, sections, story]
   );
 
   const handleApproveIllustration = useCallback(
