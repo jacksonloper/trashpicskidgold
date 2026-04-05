@@ -4,13 +4,13 @@ const DEFAULT_TEXT_MODEL = "gemini-3-pro-image-preview";
 /** Model options for image generation. */
 export const IMAGE_MODELS = [
   { id: "gemini-3-pro-image-preview", label: "Quality (slower)" },
-  { id: "gemini-2.0-flash-preview-image-generation", label: "Fast" },
+  { id: "gemini-2.5-flash-image", label: "Fast" },
 ];
 
 /** Model options for text-based planning. */
 export const TEXT_MODELS = [
   { id: "gemini-3-pro-image-preview", label: "Quality (slower)" },
-  { id: "gemini-2.0-flash", label: "Fast" },
+  { id: "gemini-2.5-flash", label: "Fast" },
 ];
 
 /**
