@@ -391,6 +391,19 @@ export default function App() {
     [updateStory]
   );
 
+  const moveSection = useCallback(
+    (idx, direction) => {
+      const target = idx + direction;
+      updateStory((s) => {
+        const secs = [...s.jsonblob.sections];
+        if (target < 0 || target >= secs.length) return s;
+        [secs[idx], secs[target]] = [secs[target], secs[idx]];
+        return { ...s, jsonblob: { ...s.jsonblob, sections: secs } };
+      });
+    },
+    [updateStory]
+  );
+
   /* ---- illustration plan → approve → generate ---- */
 
   const handlePlanIllustration = useCallback(
@@ -573,6 +586,8 @@ export default function App() {
                         updateSectionField(idx, "content", val)
                       }
                       onRemove={() => removeSection(idx)}
+                      onMoveUp={idx > 0 ? () => moveSection(idx, -1) : null}
+                      onMoveDown={idx < sections.length - 1 ? () => moveSection(idx, 1) : null}
                     />
                   ) : (
                     <Illustration
@@ -589,6 +604,8 @@ export default function App() {
                       }
                       onPlanIllustration={(textModel) => handlePlanIllustration(idx, textModel)}
                       onRemove={() => removeSection(idx)}
+                      onMoveUp={idx > 0 ? () => moveSection(idx, -1) : null}
+                      onMoveDown={idx < sections.length - 1 ? () => moveSection(idx, 1) : null}
                     />
                   )
                 )}

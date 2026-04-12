@@ -282,6 +282,33 @@
   color: #e53935;
 }
 
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-move {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #666;
+  cursor: pointer;
+  padding: 0.15rem 0.4rem;
+  line-height: 1;
+}
+
+.btn-move:hover:not(:disabled) {
+  border-color: #4285f4;
+  color: #4285f4;
+}
+
+.btn-move:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .generate-row {
   margin-top: 1rem;
 }
