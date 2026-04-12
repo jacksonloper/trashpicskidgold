@@ -32,6 +32,8 @@ import {
 import { loadExampleStory } from "./exampleStory";
 import "./App.css";
 
+const AUTO_SAVE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 export default function App() {
   /* ---- top-level state ---- */
   const [apiKey, setApiKey] = useState("");
@@ -49,7 +51,7 @@ export default function App() {
   const [loadingExample, setLoadingExample] = useState(false);
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
 
-  const saveTimer = useRef(null);
+  const dirtyStoryRef = useRef(null);
 
   /* ---- helpers ---- */
 
@@ -60,37 +62,55 @@ export default function App() {
     [story]
   );
 
-  /** Persist the story (debounced 500 ms). */
-  const scheduleSave = useCallback(
-    (s) => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(async () => {
-        try {
-          await saveStory(s);
-          setStoryList((prev) =>
-            prev.map((x) =>
-              x.id === s.id ? { ...x, title: s.title } : x
-            )
-          );
-        } catch (err) {
-          console.error("auto-save failed", err);
-        }
-      }, 500);
-    },
-    []
-  );
+  /** Flush any pending dirty story to IndexedDB immediately. */
+  const flushSave = useCallback(async () => {
+    const s = dirtyStoryRef.current;
+    if (!s) return;
+    dirtyStoryRef.current = null;
+    try {
+      await saveStory(s);
+      setStoryList((prev) =>
+        prev.map((x) =>
+          x.id === s.id ? { ...x, title: s.title } : x
+        )
+      );
+    } catch (err) {
+      console.error("auto-save failed", err);
+    }
+  }, []);
 
-  /** Update in-memory story and schedule persist. */
+  /** Save triggers: blur, visibilitychange, beforeunload, 5-min interval. */
+  useEffect(() => {
+    const handleBlur = () => { flushSave(); };
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") flushSave();
+    };
+    const handleBeforeUnload = () => { flushSave(); };
+
+    window.addEventListener("blur", handleBlur);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    const intervalId = setInterval(flushSave, AUTO_SAVE_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener("blur", handleBlur);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      clearInterval(intervalId);
+    };
+  }, [flushSave]);
+
+  /** Update in-memory story and mark dirty for next flush. */
   const updateStory = useCallback(
     (fn) => {
       setStory((prev) => {
         if (!prev) return prev;
         const next = typeof fn === "function" ? fn(prev) : { ...prev, ...fn };
-        scheduleSave(next);
+        dirtyStoryRef.current = next;
         return next;
       });
     },
-    [scheduleSave]
+    []
   );
 
   /* ---- bootstrap ---- */
@@ -116,6 +136,9 @@ export default function App() {
   /* ---- load active story ---- */
 
   useEffect(() => {
+    // Flush any pending save from the previous story before loading a new one.
+    flushSave();
+
     if (!activeStoryId) {
       setStory(null);
       setAllImages({});
@@ -154,7 +177,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeStoryId]);
+  }, [activeStoryId, flushSave]);
 
   /* ---- story CRUD ---- */
 
