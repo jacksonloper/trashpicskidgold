@@ -10,6 +10,8 @@ export default function Illustration({
   onCaptionChange,
   onPlanIllustration,
   onRemove,
+  onMoveUp,
+  onMoveDown,
 }) {
   const [textModel, setTextModel] = useState(TEXT_MODELS[0].id);
   const canPlan = !generating && !planning && caption.trim().length > 0;
@@ -18,14 +20,34 @@ export default function Illustration({
     <div className="card illustration-card">
       <div className="illustration-header">
         <h3>Page {index + 1}</h3>
-        <button
-          type="button"
-          className="btn-remove"
-          onClick={onRemove}
-          title="Remove illustration"
-        >
-          ✕
-        </button>
+        <div className="section-header-actions">
+          <button
+            type="button"
+            className="btn-move"
+            onClick={onMoveUp}
+            disabled={!onMoveUp}
+            title="Move up"
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            className="btn-move"
+            onClick={onMoveDown}
+            disabled={!onMoveDown}
+            title="Move down"
+          >
+            ▼
+          </button>
+          <button
+            type="button"
+            className="btn-remove"
+            onClick={onRemove}
+            title="Remove illustration"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <input
