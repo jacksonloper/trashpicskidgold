@@ -139,6 +139,10 @@ export default function App() {
     const handleBeforeUnload = () => {
       // Best-effort fire-and-forget; visibilitychange (hidden) fires first
       // in most browsers, so this is a safety net.
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
       const s = dirtyStoryRef.current;
       if (s) {
         dirtyStoryRef.current = null;
@@ -154,7 +158,9 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      // Flush on unmount
+      // Best-effort flush on unmount (async, may not complete if React
+      // tears down synchronously, but the beforeunload/visibility handlers
+      // cover the tab-close path).
       flushSave();
     };
   }, [flushSave]);
