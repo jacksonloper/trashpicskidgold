@@ -49,7 +49,8 @@ export default function App() {
   const [loadingExample, setLoadingExample] = useState(false);
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
 
-  const saveTimer = useRef(null);
+  const dirtyStoryRef = useRef(null);
+  const saveTimerRef = useRef(null);
 
   /* ---- helpers ---- */
 
@@ -60,24 +61,39 @@ export default function App() {
     [story]
   );
 
-  /** Persist the story (debounced 500 ms). */
+  /**
+   * Immediately persist whatever is in dirtyStoryRef and clear it.
+   * Safe to call even when nothing is dirty.
+   */
+  const flushSave = useCallback(async () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const s = dirtyStoryRef.current;
+    if (!s) return;
+    dirtyStoryRef.current = null;
+    try {
+      await saveStory(s);
+      setStoryList((prev) =>
+        prev.map((x) => (x.id === s.id ? { ...x, title: s.title } : x))
+      );
+    } catch (err) {
+      console.error("auto-save failed", err);
+    }
+  }, []);
+
+  /** Mark story dirty and schedule a deferred persist (500 ms). */
   const scheduleSave = useCallback(
     (s) => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(async () => {
-        try {
-          await saveStory(s);
-          setStoryList((prev) =>
-            prev.map((x) =>
-              x.id === s.id ? { ...x, title: s.title } : x
-            )
-          );
-        } catch (err) {
-          console.error("auto-save failed", err);
-        }
+      dirtyStoryRef.current = s;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
+        flushSave();
       }, 500);
     },
-    []
+    [flushSave]
   );
 
   /** Update in-memory story and schedule persist. */
@@ -112,6 +128,42 @@ export default function App() {
       setReady(true);
     })();
   }, []);
+
+  /* ---- flush on tab hide / page unload / blur ---- */
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") flushSave();
+    };
+    const handleBlur = () => flushSave();
+    const handleBeforeUnload = () => {
+      // Best-effort fire-and-forget; visibilitychange (hidden) fires first
+      // in most browsers, so this is a safety net.
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      const s = dirtyStoryRef.current;
+      if (s) {
+        dirtyStoryRef.current = null;
+        saveStory(s).catch(() => {});
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // Best-effort flush on unmount (async, may not complete if React
+      // tears down synchronously, but the beforeunload/visibility handlers
+      // cover the tab-close path).
+      flushSave();
+    };
+  }, [flushSave]);
 
   /* ---- load active story ---- */
 
@@ -158,16 +210,34 @@ export default function App() {
 
   /* ---- story CRUD ---- */
 
+  /** Flush pending save before switching to a different story. */
+  const handleSelectStory = useCallback(
+    async (id) => {
+      await flushSave();
+      setActiveStoryId(id);
+    },
+    [flushSave]
+  );
+
   const handleNewStory = useCallback(async () => {
+    await flushSave();
     const id = newStoryId();
     const blank = createBlankStory(id);
     await saveStory(blank);
     setStoryList((prev) => [...prev, { id, title: blank.title }]);
     setActiveStoryId(id);
-  }, []);
+  }, [flushSave]);
 
   const handleDeleteStory = useCallback(async () => {
     if (!activeStoryId) return;
+    // Discard any pending save for the story we are about to delete
+    if (dirtyStoryRef.current?.id === activeStoryId) {
+      dirtyStoryRef.current = null;
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    }
     await deleteStoryDb(activeStoryId);
     const remaining = storyList.filter((s) => s.id !== activeStoryId);
     setStoryList(remaining);
@@ -177,6 +247,7 @@ export default function App() {
   }, [activeStoryId, storyList]);
 
   const handleLoadExample = useCallback(async () => {
+    await flushSave();
     setLoadingExample(true);
     setError(null);
     try {
@@ -188,7 +259,7 @@ export default function App() {
     } finally {
       setLoadingExample(false);
     }
-  }, []);
+  }, [flushSave]);
 
   /* ---- API key ---- */
 
@@ -502,7 +573,7 @@ export default function App() {
       <Navbar
         stories={storyList}
         activeStoryId={activeStoryId}
-        onSelectStory={setActiveStoryId}
+        onSelectStory={handleSelectStory}
         onNewStory={handleNewStory}
         onDeleteStory={handleDeleteStory}
         onLoadExample={handleLoadExample}
