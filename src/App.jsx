@@ -475,47 +475,47 @@ export default function App() {
     [updateStory]
   );
 
-  /* ---- illustration plan → approve → generate ---- */
+  /* ---- illustration plan → generate ---- */
 
-  const handlePlanIllustration = useCallback(
+  /**
+   * Ask the model to plan the illustration for a section.
+   * Returns the plan, or null if planning failed (error is surfaced).
+   */
+  const runPlan = useCallback(
     async (idx, textModel) => {
-      if (!story) return;
       setError(null);
       setPlanningSections((prev) => ({ ...prev, [idx]: true }));
-
       try {
-        const caption = sections[idx]?.caption;
-        const plan = await planIllustration(
+        return await planIllustration(
           apiKey,
           style,
           referenceGraphics,
           sections,
-          caption,
+          sections[idx]?.caption,
           allImages,
           textModel
         );
-        setIllustrationPlan({ idx, ...plan });
       } catch (err) {
         setError(err.message);
+        return null;
       } finally {
         setPlanningSections((prev) => ({ ...prev, [idx]: false }));
       }
     },
-    [apiKey, allImages, style, referenceGraphics, sections, story]
+    [apiKey, allImages, style, referenceGraphics, sections]
   );
 
-  const handleApproveIllustration = useCallback(
-    async (approvedPlan) => {
-      const idx = illustrationPlan.idx;
-      setIllustrationPlan(null);
+  /** Generate + persist the image for a section from a finished plan. */
+  const runGenerate = useCallback(
+    async (idx, plan) => {
       if (!story) return;
       setError(null);
       setGeneratingSections((prev) => ({ ...prev, [idx]: true }));
 
       try {
-        // Collect reference images from approved plan
+        // Collect reference images from the plan
         const refImgs = [];
-        for (const imgId of approvedPlan.referenceImageIds) {
+        for (const imgId of plan.referenceImageIds) {
           const dataUrl = allImages[imgId];
           if (dataUrl) {
             const base64 = dataUrl.split(",")[1];
@@ -526,9 +526,9 @@ export default function App() {
 
         const dataUrl = await generateImageWithReferences(
           apiKey,
-          approvedPlan.prompt,
+          plan.prompt,
           refImgs,
-          approvedPlan.imageModel
+          plan.imageModel
         );
 
         const imgId = newImageId();
@@ -548,14 +548,36 @@ export default function App() {
         setGeneratingSections((prev) => ({ ...prev, [idx]: false }));
       }
     },
-    [
-      apiKey,
-      allImages,
-      illustrationPlan,
-      sections,
-      story,
-      updateSectionField,
-    ]
+    [apiKey, allImages, sections, story, updateSectionField]
+  );
+
+  /** Plan only, then open the review modal. */
+  const handlePlanIllustration = useCallback(
+    async (idx, textModel) => {
+      if (!story) return;
+      const plan = await runPlan(idx, textModel);
+      if (plan) setIllustrationPlan({ idx, ...plan });
+    },
+    [runPlan, story]
+  );
+
+  /** One-shot: plan and immediately generate, skipping the review modal. */
+  const handleGenerateIllustration = useCallback(
+    async (idx, textModel, imageModel) => {
+      if (!story) return;
+      const plan = await runPlan(idx, textModel);
+      if (plan) await runGenerate(idx, { ...plan, imageModel });
+    },
+    [runGenerate, runPlan, story]
+  );
+
+  const handleApproveIllustration = useCallback(
+    async (approvedPlan) => {
+      const idx = illustrationPlan.idx;
+      setIllustrationPlan(null);
+      await runGenerate(idx, approvedPlan);
+    },
+    [illustrationPlan, runGenerate]
   );
 
   const handleCancelPlan = useCallback(() => setIllustrationPlan(null), []);
@@ -672,6 +694,9 @@ export default function App() {
                       planning={!!planningSections[idx]}
                       onCaptionChange={(val) =>
                         updateSectionField(idx, "caption", val)
+                      }
+                      onGenerateIllustration={(textModel, imageModel) =>
+                        handleGenerateIllustration(idx, textModel, imageModel)
                       }
                       onPlanIllustration={(textModel) => handlePlanIllustration(idx, textModel)}
                       onRemove={() => removeSection(idx)}

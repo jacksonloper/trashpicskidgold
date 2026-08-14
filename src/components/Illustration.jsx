@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TEXT_MODELS } from "../gemini";
+import { TEXT_MODELS, IMAGE_MODELS } from "../gemini";
 
 export default function Illustration({
   index,
@@ -8,13 +8,15 @@ export default function Illustration({
   generating,
   planning,
   onCaptionChange,
+  onGenerateIllustration,
   onPlanIllustration,
   onRemove,
   onMoveUp,
   onMoveDown,
 }) {
   const [textModel, setTextModel] = useState(TEXT_MODELS[0].id);
-  const canPlan = !generating && !planning && caption.trim().length > 0;
+  const [imageModel, setImageModel] = useState(IMAGE_MODELS[0].id);
+  const canGenerate = !generating && !planning && caption.trim().length > 0;
 
   return (
     <div className="card illustration-card">
@@ -72,20 +74,45 @@ export default function Illustration({
             ))}
           </select>
         </label>
+
+        <label className="model-select-label">
+          Image model
+          <select
+            value={imageModel}
+            onChange={(e) => setImageModel(e.target.value)}
+          >
+            {IMAGE_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <button
-        type="button"
-        className="btn-primary"
-        disabled={!canPlan}
-        onClick={() => onPlanIllustration(textModel)}
-      >
-        {planning
-          ? "Planning…"
-          : generating
-            ? "Generating…"
-            : "🖼️ Generate Illustration"}
-      </button>
+      <div className="illustration-actions">
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={!canGenerate}
+          onClick={() => onGenerateIllustration(textModel, imageModel)}
+        >
+          {planning
+            ? "Planning…"
+            : generating
+              ? "Generating…"
+              : "🖼️ Generate Illustration"}
+        </button>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={!canGenerate}
+          onClick={() => onPlanIllustration(textModel)}
+          title="Plan the prompt first, then review and edit it before generating"
+        >
+          📝 Generate Text &amp; Preview
+        </button>
+      </div>
 
       {imageUrl && (
         <div className="image-preview">
