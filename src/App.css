@@ -546,6 +546,24 @@
   align-items: center;
   gap: 0.75rem;
   margin: 0.5rem 0;
+  flex-wrap: wrap;
+}
+
+.illustration-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.illustration-actions .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.illustration-actions .btn-secondary:disabled:hover {
+  border-color: #aaa;
+  color: #555;
 }
 
 .model-select-label {
