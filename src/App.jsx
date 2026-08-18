@@ -9,6 +9,8 @@ import Illustration from "./components/Illustration";
 import IllustrationPlanModal from "./components/IllustrationPlanModal";
 import MarkdownSection from "./components/MarkdownSection";
 import ExportButtons from "./components/ExportButtons";
+import ConfirmDialog from "./components/ConfirmDialog";
+import UndoToast from "./components/UndoToast";
 import {
   buildRefGraphicPrompt,
   planIllustration,
@@ -22,6 +24,7 @@ import {
   getStory,
   saveStory,
   deleteStory as deleteStoryDb,
+  restoreStory,
   getImage,
   saveImage,
   newStoryId,
@@ -47,6 +50,8 @@ export default function App() {
   const [error, setError] = useState(null);
   const [ready, setReady] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null); // { id, title, imageCount }
+  const [deleted, setDeleted] = useState(null); // { snapshot, title, index } for undo
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
 
   const dirtyStoryRef = useRef(null);
@@ -228,23 +233,64 @@ export default function App() {
     setActiveStoryId(id);
   }, [flushSave]);
 
-  const handleDeleteStory = useCallback(async () => {
+  /** Ask for confirmation before deleting — deletion wipes images too. */
+  const handleRequestDeleteStory = useCallback(() => {
     if (!activeStoryId) return;
+    const entry = storyList.find((s) => s.id === activeStoryId);
+    setConfirmDelete({
+      id: activeStoryId,
+      title: entry?.title || story?.title || "Untitled",
+      imageCount: Object.keys(allImages).length,
+    });
+  }, [activeStoryId, allImages, story, storyList]);
+
+  const handleCancelDeleteStory = useCallback(() => setConfirmDelete(null), []);
+
+  const handleConfirmDeleteStory = useCallback(async () => {
+    const id = confirmDelete?.id;
+    if (!id) return;
+    setConfirmDelete(null);
     // Discard any pending save for the story we are about to delete
-    if (dirtyStoryRef.current?.id === activeStoryId) {
+    if (dirtyStoryRef.current?.id === id) {
       dirtyStoryRef.current = null;
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
     }
-    await deleteStoryDb(activeStoryId);
-    const remaining = storyList.filter((s) => s.id !== activeStoryId);
+    const index = storyList.findIndex((s) => s.id === id);
+    const snapshot = await deleteStoryDb(id);
+    const remaining = storyList.filter((s) => s.id !== id);
     setStoryList(remaining);
-    setStory(null);
-    setAllImages({});
-    setActiveStoryId(remaining.length > 0 ? remaining[0].id : null);
-  }, [activeStoryId, storyList]);
+    setDeleted({
+      snapshot,
+      title: confirmDelete.title,
+      index: index === -1 ? remaining.length : index,
+    });
+    if (activeStoryId === id) {
+      setStory(null);
+      setAllImages({});
+      setActiveStoryId(remaining.length > 0 ? remaining[0].id : null);
+    }
+  }, [activeStoryId, confirmDelete, storyList]);
+
+  const handleUndoDelete = useCallback(async () => {
+    if (!deleted?.snapshot?.story) return;
+    const { snapshot, index } = deleted;
+    setDeleted(null);
+    await restoreStory(snapshot);
+    const entry = { id: snapshot.story.id, title: snapshot.story.title };
+    setStoryList((prev) => {
+      if (prev.some((s) => s.id === entry.id)) return prev;
+      const next = [...prev];
+      next.splice(Math.min(index, next.length), 0, entry);
+      return next;
+    });
+    await flushSave();
+    setActiveStoryId(entry.id);
+  }, [deleted, flushSave]);
+
+  const handleDismissUndo = useCallback(() => setDeleted(null), []);
 
   const handleLoadExample = useCallback(async () => {
     await flushSave();
@@ -597,7 +643,7 @@ export default function App() {
         activeStoryId={activeStoryId}
         onSelectStory={handleSelectStory}
         onNewStory={handleNewStory}
-        onDeleteStory={handleDeleteStory}
+        onDeleteStory={handleRequestDeleteStory}
         onLoadExample={handleLoadExample}
         loadingExample={loadingExample}
       />
@@ -753,6 +799,59 @@ export default function App() {
           sections={sections}
           onApprove={handleApproveIllustration}
           onCancel={handleCancelPlan}
+        />
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete this story?"
+          confirmLabel="🗑️ Delete story"
+          confirmPhrase={confirmDelete.title || "Untitled"}
+          phraseLabel={
+            <>
+              Type the story title —{" "}
+              <code className="confirm-phrase">
+                {confirmDelete.title || "Untitled"}
+              </code>{" "}
+              — to confirm
+            </>
+          }
+          message={
+            <>
+              <p>
+                <strong>{confirmDelete.title || "Untitled"}</strong> will be
+                removed from this browser
+                {confirmDelete.imageCount > 0 && (
+                  <>
+                    , along with{" "}
+                    <strong>
+                      {confirmDelete.imageCount} generated image
+                      {confirmDelete.imageCount === 1 ? "" : "s"}
+                    </strong>
+                  </>
+                )}
+                .
+              </p>
+              <p className="confirm-note">
+                Stories live only in this browser, so there is no copy on a
+                server to fall back on. You will get a short window to undo —
+                after that it is gone for good. Export first if you want to
+                keep it.
+              </p>
+            </>
+          }
+          onConfirm={handleConfirmDeleteStory}
+          onCancel={handleCancelDeleteStory}
+        />
+      )}
+
+      {/* Undo window after a delete */}
+      {deleted && (
+        <UndoToast
+          message={`Deleted "${deleted.title || "Untitled"}"`}
+          onUndo={handleUndoDelete}
+          onDismiss={handleDismissUndo}
         />
       )}
     </div>

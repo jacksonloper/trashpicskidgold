@@ -181,17 +181,51 @@ export async function saveStory(story) {
   await put("stories", story);
 }
 
+/**
+ * Delete a story and every image belonging to it.
+ *
+ * Returns a snapshot of everything that was removed —
+ * `{ story, images }` — which can be handed back to `restoreStory`
+ * to undo the deletion.
+ */
 export async function deleteStory(id) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(["images", "stories"], "readwrite");
     const imgStore = tx.objectStore("images");
-    const idx = imgStore.index("storyId");
-    const keysReq = idx.getAllKeys(id);
-    keysReq.onsuccess = () => {
-      for (const k of keysReq.result) imgStore.delete(k);
-      tx.objectStore("stories").delete(id);
+    const storyStore = tx.objectStore("stories");
+    const snapshot = { story: null, images: [] };
+
+    // Read the records out before deleting them so the caller can undo.
+    const storyReq = storyStore.get(id);
+    storyReq.onsuccess = () => {
+      snapshot.story = storyReq.result ?? null;
+      storyStore.delete(id);
     };
+
+    const imgsReq = imgStore.index("storyId").getAll(id);
+    imgsReq.onsuccess = () => {
+      snapshot.images = imgsReq.result ?? [];
+      for (const img of snapshot.images) imgStore.delete(img.id);
+    };
+
+    tx.oncomplete = () => resolve(snapshot);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Put back a story (and its images) captured by `deleteStory`.
+ * No-op when the snapshot has no story record.
+ */
+export async function restoreStory(snapshot) {
+  if (!snapshot?.story) return;
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(["images", "stories"], "readwrite");
+    const imgStore = tx.objectStore("images");
+    for (const img of snapshot.images ?? []) imgStore.put(img);
+    tx.objectStore("stories").put(snapshot.story);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
