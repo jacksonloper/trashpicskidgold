@@ -6,7 +6,16 @@ export default function Navbar({
   onDeleteStory,
   onLoadExample,
   loadingExample,
+  onImport,
+  importing,
 }) {
+  const handleImportChange = (e) => {
+    const files = Array.from(e.target.files ?? []);
+    // Reset first, so picking the same file twice still fires a change event.
+    e.target.value = "";
+    if (files.length) onImport(files);
+  };
+
   return (
     <nav className="navbar">
       <span className="navbar-brand">📖 Story Maker</span>
@@ -42,6 +51,21 @@ export default function Navbar({
         >
           {loadingExample ? "Loading…" : "📋 Example"}
         </button>
+
+        <label
+          className="btn-small ref-upload-label"
+          title="Load story ZIPs previously downloaded from Export"
+        >
+          {importing ? "Importing…" : "📥 Import"}
+          <input
+            type="file"
+            accept=".zip,application/zip"
+            multiple
+            disabled={importing}
+            style={{ display: "none" }}
+            onChange={handleImportChange}
+          />
+        </label>
 
         {activeStoryId && (
           <button

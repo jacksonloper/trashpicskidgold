@@ -236,20 +236,29 @@ export async function deleteStory(id) {
 }
 
 /**
+ * Write a story and its images in one transaction, so a story is never
+ * left visible in the list with only some of its artwork attached.
+ */
+export async function saveStoryWithImages(story, images) {
+  if (!story) return;
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(["images", "stories"], "readwrite");
+    const imgStore = tx.objectStore("images");
+    for (const img of images ?? []) imgStore.put(img);
+    tx.objectStore("stories").put(story);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
  * Put back a story (and its images) captured by `deleteStory`.
  * No-op when the snapshot has no story record.
  */
 export async function restoreStory(snapshot) {
   if (!snapshot?.story) return;
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(["images", "stories"], "readwrite");
-    const imgStore = tx.objectStore("images");
-    for (const img of snapshot.images ?? []) imgStore.put(img);
-    tx.objectStore("stories").put(snapshot.story);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  return saveStoryWithImages(snapshot.story, snapshot.images);
 }
 
 /* ---- images ---- */

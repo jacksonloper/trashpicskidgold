@@ -23,6 +23,7 @@ import {
   listStories,
   getStory,
   saveStory,
+  saveStoryWithImages,
   deleteStory as deleteStoryDb,
   restoreStory,
   getImage,
@@ -34,6 +35,7 @@ import {
   migrateStory,
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
+import { readStoryBundle, prepareForImport } from "./storyBundle";
 import "./App.css";
 
 /** Heading a section shows on its card, used in undo/confirm copy. */
@@ -142,6 +144,8 @@ export default function App() {
   const [error, setError] = useState(null);
   const [ready, setReady] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importNote, setImportNote] = useState(null);
   const [confirm, setConfirm] = useState(null); // pending destructive action
   const [undo, setUndo] = useState(null); // last reversible deletion
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
@@ -385,6 +389,71 @@ export default function App() {
       setLoadingExample(false);
     }
   }, [flushSave]);
+
+  /**
+   * Import one or more story ZIPs.
+   *
+   * Each file is handled independently so one bad archive cannot abort the
+   * rest of a batch — useful when restoring a whole shelf of stories at once.
+   * A bundle whose story id is already present is imported as a copy under
+   * fresh ids rather than overwriting what is here.
+   */
+  const handleImport = useCallback(
+    async (files) => {
+      await flushSave();
+      setImporting(true);
+      setError(null);
+      setImportNote(null);
+      try {
+        const existingIds = (await listStories()).map((s) => s.id);
+        const added = [];
+        const failures = [];
+        let copies = 0;
+        let droppedImages = 0;
+
+        for (const file of files) {
+          try {
+            const bundle = await readStoryBundle(file);
+            const prepared = prepareForImport(bundle, existingIds);
+            await saveStoryWithImages(prepared.story, prepared.images);
+            existingIds.push(prepared.story.id);
+            added.push({ id: prepared.story.id, title: prepared.story.title });
+            if (prepared.remapped) copies++;
+            droppedImages += prepared.droppedImageRefs;
+          } catch (err) {
+            failures.push(`${file.name}: ${err.message}`);
+          }
+        }
+
+        if (added.length > 0) {
+          setStoryList((prev) => [...prev, ...added]);
+          setActiveStoryId(added[added.length - 1].id);
+          const bits = [
+            `Imported ${added.length} ${added.length === 1 ? "story" : "stories"}`,
+          ];
+          if (copies > 0) {
+            bits.push(
+              `${copies} already existed and came in as ${copies === 1 ? "a copy" : "copies"}`
+            );
+          }
+          if (droppedImages > 0) {
+            bits.push(
+              `${droppedImages} ${droppedImages === 1 ? "picture was" : "pictures were"} missing from the archive and can be generated again`
+            );
+          }
+          setImportNote(bits.join(" — ") + ".");
+        }
+        if (failures.length > 0) {
+          setError(`Could not import: ${failures.join("; ")}`);
+        }
+      } catch (err) {
+        setError("Import failed: " + err.message);
+      } finally {
+        setImporting(false);
+      }
+    },
+    [flushSave]
+  );
 
   /* ---- API key ---- */
 
@@ -856,6 +925,8 @@ export default function App() {
         onDeleteStory={handleRequestDeleteStory}
         onLoadExample={handleLoadExample}
         loadingExample={loadingExample}
+        onImport={handleImport}
+        importing={importing}
       />
 
       <div className="app">
@@ -993,6 +1064,19 @@ export default function App() {
               {/* Export */}
               <ExportButtons story={story} />
             </>
+          )}
+
+          {importNote && (
+            <div className="import-banner" role="status">
+              {importNote}
+              <button
+                type="button"
+                className="btn-small"
+                onClick={() => setImportNote(null)}
+              >
+                Dismiss
+              </button>
+            </div>
           )}
 
           {error && (
