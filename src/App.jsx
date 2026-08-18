@@ -29,11 +29,103 @@ import {
   saveImage,
   newStoryId,
   newImageId,
+  newSectionId,
   createBlankStory,
   migrateStory,
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
 import "./App.css";
+
+/** Heading a section shows on its card, used in undo/confirm copy. */
+function sectionTitle(sec, index) {
+  return sec.type === "illustration"
+    ? `Page ${index + 1}`
+    : `Text Block ${index + 1}`;
+}
+
+/**
+ * Dialog copy for a pending destructive action.
+ *
+ * Deleting a story is the big one — it takes every image with it and there is
+ * no server copy — so it asks the user to type the title back. Removing a
+ * single panel is a far smaller loss, so it only interrupts when there is
+ * artwork to lose, and never asks anyone to type anything.
+ */
+function confirmProps(pending) {
+  if (pending.kind === "story") {
+    const title = pending.title || "Untitled";
+    return {
+      title: "Delete this story?",
+      confirmLabel: "🗑️ Delete story",
+      confirmPhrase: title,
+      phraseLabel: (
+        <>
+          Type the story title —{" "}
+          <code className="confirm-phrase">{title}</code> — to confirm
+        </>
+      ),
+      message: (
+        <>
+          <p>
+            <strong>{title}</strong> will be removed from this browser
+            {pending.imageCount > 0 && (
+              <>
+                , along with{" "}
+                <strong>
+                  {pending.imageCount} generated image
+                  {pending.imageCount === 1 ? "" : "s"}
+                </strong>
+              </>
+            )}
+            .
+          </p>
+          <p className="confirm-note">
+            Stories live only in this browser, so there is no copy on a server
+            to fall back on. You will get a short window to undo — after that it
+            is gone for good. Export first if you want to keep it.
+          </p>
+        </>
+      ),
+    };
+  }
+
+  if (pending.kind === "section") {
+    return {
+      title: "Remove this page?",
+      confirmLabel: "🗑️ Remove page",
+      message: (
+        <>
+          <p>
+            <strong>{pending.title}</strong> has an illustration you generated.
+            Removing the page takes the picture out of the story with it.
+          </p>
+          <p className="confirm-note">
+            You will get a few seconds to undo. After that, getting this picture
+            back means generating it again.
+          </p>
+        </>
+      ),
+    };
+  }
+
+  return {
+    title: "Remove this reference graphic?",
+    confirmLabel: "🗑️ Remove reference",
+    message: (
+      <>
+        <p>
+          <strong>{pending.label}</strong> has an image. Removing it means new
+          illustrations will no longer use it to keep characters and scenes
+          looking consistent.
+        </p>
+        <p className="confirm-note">
+          You will get a few seconds to undo. After that, getting this image
+          back means generating or uploading it again.
+        </p>
+      </>
+    ),
+  };
+}
 
 export default function App() {
   /* ---- top-level state ---- */
@@ -46,12 +138,12 @@ export default function App() {
   const [generatingRefIds, setGeneratingRefIds] = useState({});
   const [generatingSections, setGeneratingSections] = useState({});
   const [planningSections, setPlanningSections] = useState({});
-  const [illustrationPlan, setIllustrationPlan] = useState(null); // { idx, prompt, referenceImageIds }
+  const [illustrationPlan, setIllustrationPlan] = useState(null); // { sectionId, prompt, referenceImageIds }
   const [error, setError] = useState(null);
   const [ready, setReady] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(null); // { id, title, imageCount }
-  const [deleted, setDeleted] = useState(null); // { snapshot, title, index } for undo
+  const [confirm, setConfirm] = useState(null); // pending destructive action
+  const [undo, setUndo] = useState(null); // last reversible deletion
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
 
   const dirtyStoryRef = useRef(null);
@@ -173,6 +265,10 @@ export default function App() {
   /* ---- load active story ---- */
 
   useEffect(() => {
+    // A panel-level undo only makes sense while its own story is on screen.
+    // A story-level undo has to outlive the switch away from the deleted story.
+    setUndo((prev) => (prev && prev.kind !== "story" ? null : prev));
+
     if (!activeStoryId) {
       setStory(null);
       setAllImages({});
@@ -237,60 +333,43 @@ export default function App() {
   const handleRequestDeleteStory = useCallback(() => {
     if (!activeStoryId) return;
     const entry = storyList.find((s) => s.id === activeStoryId);
-    setConfirmDelete({
+    setConfirm({
+      kind: "story",
       id: activeStoryId,
       title: entry?.title || story?.title || "Untitled",
       imageCount: Object.keys(allImages).length,
     });
   }, [activeStoryId, allImages, story, storyList]);
 
-  const handleCancelDeleteStory = useCallback(() => setConfirmDelete(null), []);
-
-  const handleConfirmDeleteStory = useCallback(async () => {
-    const id = confirmDelete?.id;
-    if (!id) return;
-    setConfirmDelete(null);
-    // Discard any pending save for the story we are about to delete
-    if (dirtyStoryRef.current?.id === id) {
-      dirtyStoryRef.current = null;
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
+  const deleteStoryNow = useCallback(
+    async (id, title) => {
+      // Discard any pending save for the story we are about to delete
+      if (dirtyStoryRef.current?.id === id) {
+        dirtyStoryRef.current = null;
+        if (saveTimerRef.current) {
+          clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = null;
+        }
       }
-    }
-    const index = storyList.findIndex((s) => s.id === id);
-    const snapshot = await deleteStoryDb(id);
-    const remaining = storyList.filter((s) => s.id !== id);
-    setStoryList(remaining);
-    setDeleted({
-      snapshot,
-      title: confirmDelete.title,
-      index: index === -1 ? remaining.length : index,
-    });
-    if (activeStoryId === id) {
-      setStory(null);
-      setAllImages({});
-      setActiveStoryId(remaining.length > 0 ? remaining[0].id : null);
-    }
-  }, [activeStoryId, confirmDelete, storyList]);
-
-  const handleUndoDelete = useCallback(async () => {
-    if (!deleted?.snapshot?.story) return;
-    const { snapshot, index } = deleted;
-    setDeleted(null);
-    await restoreStory(snapshot);
-    const entry = { id: snapshot.story.id, title: snapshot.story.title };
-    setStoryList((prev) => {
-      if (prev.some((s) => s.id === entry.id)) return prev;
-      const next = [...prev];
-      next.splice(Math.min(index, next.length), 0, entry);
-      return next;
-    });
-    await flushSave();
-    setActiveStoryId(entry.id);
-  }, [deleted, flushSave]);
-
-  const handleDismissUndo = useCallback(() => setDeleted(null), []);
+      const index = storyList.findIndex((s) => s.id === id);
+      const snapshot = await deleteStoryDb(id);
+      const remaining = storyList.filter((s) => s.id !== id);
+      setStoryList(remaining);
+      setUndo({
+        undoId: crypto.randomUUID(),
+        kind: "story",
+        message: `Deleted "${title || "Untitled"}"`,
+        snapshot,
+        index: index === -1 ? remaining.length : index,
+      });
+      if (activeStoryId === id) {
+        setStory(null);
+        setAllImages({});
+        setActiveStoryId(remaining.length > 0 ? remaining[0].id : null);
+      }
+    },
+    [activeStoryId, storyList]
+  );
 
   const handleLoadExample = useCallback(async () => {
     await flushSave();
@@ -357,8 +436,12 @@ export default function App() {
     }));
   }, [updateStory]);
 
-  const handleRemoveRefGraphic = useCallback(
-    (rgId) =>
+  /** Remove a reference graphic, keeping a snapshot the toast can put back. */
+  const removeRefGraphicNow = useCallback(
+    (rgId) => {
+      const index = referenceGraphics.findIndex((rg) => rg.id === rgId);
+      if (index === -1 || !story) return;
+      const removed = referenceGraphics[index];
       updateStory((s) => ({
         ...s,
         jsonblob: {
@@ -367,8 +450,35 @@ export default function App() {
             (rg) => rg.id !== rgId
           ),
         },
-      })),
-    [updateStory]
+      }));
+      setUndo({
+        undoId: crypto.randomUUID(),
+        kind: "refGraphic",
+        storyId: story.id,
+        message: `Removed reference "${removed.label || "unlabeled"}"`,
+        refGraphic: removed,
+        index,
+      });
+    },
+    [referenceGraphics, story, updateStory]
+  );
+
+  /** ✕ on a reference graphic: ask first when there is an image to lose. */
+  const handleRemoveRefGraphic = useCallback(
+    (rgId) => {
+      const rg = referenceGraphics.find((x) => x.id === rgId);
+      if (!rg) return;
+      if (rg.imageId) {
+        setConfirm({
+          kind: "refGraphic",
+          rgId,
+          label: rg.label || "This reference graphic",
+        });
+      } else {
+        removeRefGraphicNow(rgId);
+      }
+    },
+    [referenceGraphics, removeRefGraphicNow]
   );
 
   const handleUpdateRefLabel = useCallback(
@@ -470,10 +580,11 @@ export default function App() {
 
   const addSection = useCallback(
     (type) => {
+      const id = newSectionId();
       const sec =
         type === "markdown"
-          ? { type: "markdown", content: "" }
-          : { type: "illustration", caption: "", imageId: null };
+          ? { id, type: "markdown", content: "" }
+          : { id, type: "illustration", caption: "", imageId: null };
       updateStory((s) => ({
         ...s,
         jsonblob: { ...s.jsonblob, sections: [...s.jsonblob.sections, sec] },
@@ -482,37 +593,79 @@ export default function App() {
     [updateStory]
   );
 
-  const removeSection = useCallback(
-    (idx) =>
+  /** Remove a section, keeping a snapshot the toast can put back. */
+  const removeSectionNow = useCallback(
+    (sectionId) => {
+      const index = sections.findIndex((sec) => sec.id === sectionId);
+      if (index === -1 || !story) return;
+      const removed = sections[index];
       updateStory((s) => ({
         ...s,
         jsonblob: {
           ...s.jsonblob,
-          sections: s.jsonblob.sections.filter((_, i) => i !== idx),
+          sections: s.jsonblob.sections.filter((sec) => sec.id !== sectionId),
         },
-      })),
-    [updateStory]
+      }));
+      setUndo({
+        undoId: crypto.randomUUID(),
+        kind: "section",
+        storyId: story.id,
+        message: `Removed ${sectionTitle(removed, index)}`,
+        section: removed,
+        index,
+      });
+    },
+    [sections, story, updateStory]
   );
 
+  /** ✕ on a section: ask first when there is a generated illustration to lose. */
+  const handleRemoveSection = useCallback(
+    (sectionId) => {
+      const index = sections.findIndex((sec) => sec.id === sectionId);
+      if (index === -1) return;
+      const sec = sections[index];
+      if (sec.type === "illustration" && sec.imageId) {
+        setConfirm({
+          kind: "section",
+          sectionId,
+          title: sectionTitle(sec, index),
+        });
+      } else {
+        removeSectionNow(sectionId);
+      }
+    },
+    [removeSectionNow, sections]
+  );
+
+  /**
+   * Sections are addressed by id, never by position, so an update that was
+   * kicked off before a removal or reorder can never land on a different panel.
+   * When the target is gone the update is simply dropped.
+   */
   const updateSectionField = useCallback(
-    (idx, field, value) =>
-      updateStory((s) => ({
-        ...s,
-        jsonblob: {
-          ...s.jsonblob,
-          sections: s.jsonblob.sections.map((sec, i) =>
-            i === idx ? { ...sec, [field]: value } : sec
-          ),
-        },
-      })),
+    (sectionId, field, value) =>
+      updateStory((s) => {
+        if (!s.jsonblob.sections.some((sec) => sec.id === sectionId)) return s;
+        return {
+          ...s,
+          jsonblob: {
+            ...s.jsonblob,
+            sections: s.jsonblob.sections.map((sec) =>
+              sec.id === sectionId ? { ...sec, [field]: value } : sec
+            ),
+          },
+        };
+      }),
     [updateStory]
   );
 
   const moveSection = useCallback(
-    (idx, direction) => {
-      const target = idx + direction;
+    (sectionId, direction) => {
       updateStory((s) => {
         const secs = [...s.jsonblob.sections];
+        const idx = secs.findIndex((sec) => sec.id === sectionId);
+        if (idx === -1) return s;
+        const target = idx + direction;
         if (target < 0 || target >= secs.length) return s;
         [secs[idx], secs[target]] = [secs[target], secs[idx]];
         return { ...s, jsonblob: { ...s.jsonblob, sections: secs } };
@@ -521,6 +674,60 @@ export default function App() {
     [updateStory]
   );
 
+  /* ---- confirm / undo dispatch ---- */
+
+  const handleCancelConfirm = useCallback(() => setConfirm(null), []);
+
+  const handleAcceptConfirm = useCallback(() => {
+    if (!confirm) return;
+    const pending = confirm;
+    setConfirm(null);
+    if (pending.kind === "story") deleteStoryNow(pending.id, pending.title);
+    else if (pending.kind === "section") removeSectionNow(pending.sectionId);
+    else if (pending.kind === "refGraphic") removeRefGraphicNow(pending.rgId);
+  }, [confirm, deleteStoryNow, removeRefGraphicNow, removeSectionNow]);
+
+  const handleDismissUndo = useCallback(() => setUndo(null), []);
+
+  /** Put back whatever the last deletion took, at the position it held. */
+  const handleUndo = useCallback(async () => {
+    if (!undo) return;
+    const pending = undo;
+    setUndo(null);
+
+    if (pending.kind === "story") {
+      if (!pending.snapshot?.story) return;
+      await restoreStory(pending.snapshot);
+      const entry = {
+        id: pending.snapshot.story.id,
+        title: pending.snapshot.story.title,
+      };
+      setStoryList((prev) => {
+        if (prev.some((s) => s.id === entry.id)) return prev;
+        const next = [...prev];
+        next.splice(Math.min(pending.index, next.length), 0, entry);
+        return next;
+      });
+      await flushSave();
+      setActiveStoryId(entry.id);
+      return;
+    }
+
+    const key = pending.kind === "section" ? "sections" : "referenceGraphics";
+    const item =
+      pending.kind === "section" ? pending.section : pending.refGraphic;
+
+    updateStory((s) => {
+      // Guard against the story having been switched out from under the toast.
+      if (s.id !== pending.storyId) return s;
+      const list = s.jsonblob[key];
+      if (list.some((x) => x.id === item.id)) return s;
+      const next = [...list];
+      next.splice(Math.min(pending.index, next.length), 0, item);
+      return { ...s, jsonblob: { ...s.jsonblob, [key]: next } };
+    });
+  }, [flushSave, undo, updateStory]);
+
   /* ---- illustration plan → generate ---- */
 
   /**
@@ -528,16 +735,18 @@ export default function App() {
    * Returns the plan, or null if planning failed (error is surfaced).
    */
   const runPlan = useCallback(
-    async (idx, textModel) => {
+    async (sectionId, textModel) => {
+      const sec = sections.find((x) => x.id === sectionId);
+      if (!sec) return null;
       setError(null);
-      setPlanningSections((prev) => ({ ...prev, [idx]: true }));
+      setPlanningSections((prev) => ({ ...prev, [sectionId]: true }));
       try {
         return await planIllustration(
           apiKey,
           style,
           referenceGraphics,
           sections,
-          sections[idx]?.caption,
+          sec.caption,
           allImages,
           textModel
         );
@@ -545,7 +754,7 @@ export default function App() {
         setError(err.message);
         return null;
       } finally {
-        setPlanningSections((prev) => ({ ...prev, [idx]: false }));
+        setPlanningSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
     [apiKey, allImages, style, referenceGraphics, sections]
@@ -553,10 +762,10 @@ export default function App() {
 
   /** Generate + persist the image for a section from a finished plan. */
   const runGenerate = useCallback(
-    async (idx, plan) => {
+    async (sectionId, plan) => {
       if (!story) return;
       setError(null);
-      setGeneratingSections((prev) => ({ ...prev, [idx]: true }));
+      setGeneratingSections((prev) => ({ ...prev, [sectionId]: true }));
 
       try {
         // Collect reference images from the plan
@@ -578,7 +787,7 @@ export default function App() {
         );
 
         const imgId = newImageId();
-        const caption = sections[idx]?.caption;
+        const caption = sections.find((x) => x.id === sectionId)?.caption;
         await saveImage({
           id: imgId,
           storyId: story.id,
@@ -587,11 +796,12 @@ export default function App() {
         });
 
         setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
-        updateSectionField(idx, "imageId", imgId);
+        // Dropped harmlessly if the page was removed while this was in flight.
+        updateSectionField(sectionId, "imageId", imgId);
       } catch (err) {
         setError(err.message);
       } finally {
-        setGeneratingSections((prev) => ({ ...prev, [idx]: false }));
+        setGeneratingSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
     [apiKey, allImages, sections, story, updateSectionField]
@@ -599,29 +809,29 @@ export default function App() {
 
   /** Plan only, then open the review modal. */
   const handlePlanIllustration = useCallback(
-    async (idx, textModel) => {
+    async (sectionId, textModel) => {
       if (!story) return;
-      const plan = await runPlan(idx, textModel);
-      if (plan) setIllustrationPlan({ idx, ...plan });
+      const plan = await runPlan(sectionId, textModel);
+      if (plan) setIllustrationPlan({ sectionId, ...plan });
     },
     [runPlan, story]
   );
 
   /** One-shot: plan and immediately generate, skipping the review modal. */
   const handleGenerateIllustration = useCallback(
-    async (idx, textModel, imageModel) => {
+    async (sectionId, textModel, imageModel) => {
       if (!story) return;
-      const plan = await runPlan(idx, textModel);
-      if (plan) await runGenerate(idx, { ...plan, imageModel });
+      const plan = await runPlan(sectionId, textModel);
+      if (plan) await runGenerate(sectionId, { ...plan, imageModel });
     },
     [runGenerate, runPlan, story]
   );
 
   const handleApproveIllustration = useCallback(
     async (approvedPlan) => {
-      const idx = illustrationPlan.idx;
+      const { sectionId } = illustrationPlan;
       setIllustrationPlan(null);
-      await runGenerate(idx, approvedPlan);
+      await runGenerate(sectionId, approvedPlan);
     },
     [illustrationPlan, runGenerate]
   );
@@ -718,36 +928,46 @@ export default function App() {
                 {sections.map((sec, idx) =>
                   sec.type === "markdown" ? (
                     <MarkdownSection
-                      key={idx}
+                      key={sec.id}
                       index={idx}
                       content={sec.content}
                       onContentChange={(val) =>
-                        updateSectionField(idx, "content", val)
+                        updateSectionField(sec.id, "content", val)
                       }
-                      onRemove={() => removeSection(idx)}
-                      onMoveUp={idx > 0 ? () => moveSection(idx, -1) : null}
-                      onMoveDown={idx < sections.length - 1 ? () => moveSection(idx, 1) : null}
+                      onRemove={() => handleRemoveSection(sec.id)}
+                      onMoveUp={idx > 0 ? () => moveSection(sec.id, -1) : null}
+                      onMoveDown={
+                        idx < sections.length - 1
+                          ? () => moveSection(sec.id, 1)
+                          : null
+                      }
                     />
                   ) : (
                     <Illustration
-                      key={idx}
+                      key={sec.id}
                       index={idx}
                       caption={sec.caption}
                       imageUrl={
                         sec.imageId ? allImages[sec.imageId] ?? null : null
                       }
-                      generating={!!generatingSections[idx]}
-                      planning={!!planningSections[idx]}
+                      generating={!!generatingSections[sec.id]}
+                      planning={!!planningSections[sec.id]}
                       onCaptionChange={(val) =>
-                        updateSectionField(idx, "caption", val)
+                        updateSectionField(sec.id, "caption", val)
                       }
                       onGenerateIllustration={(textModel, imageModel) =>
-                        handleGenerateIllustration(idx, textModel, imageModel)
+                        handleGenerateIllustration(sec.id, textModel, imageModel)
                       }
-                      onPlanIllustration={(textModel) => handlePlanIllustration(idx, textModel)}
-                      onRemove={() => removeSection(idx)}
-                      onMoveUp={idx > 0 ? () => moveSection(idx, -1) : null}
-                      onMoveDown={idx < sections.length - 1 ? () => moveSection(idx, 1) : null}
+                      onPlanIllustration={(textModel) =>
+                        handlePlanIllustration(sec.id, textModel)
+                      }
+                      onRemove={() => handleRemoveSection(sec.id)}
+                      onMoveUp={idx > 0 ? () => moveSection(sec.id, -1) : null}
+                      onMoveDown={
+                        idx < sections.length - 1
+                          ? () => moveSection(sec.id, 1)
+                          : null
+                      }
                     />
                   )
                 )}
@@ -802,55 +1022,21 @@ export default function App() {
         />
       )}
 
-      {/* Delete confirmation */}
-      {confirmDelete && (
+      {/* Confirmation for the destructive actions that can actually lose work */}
+      {confirm && (
         <ConfirmDialog
-          title="Delete this story?"
-          confirmLabel="🗑️ Delete story"
-          confirmPhrase={confirmDelete.title || "Untitled"}
-          phraseLabel={
-            <>
-              Type the story title —{" "}
-              <code className="confirm-phrase">
-                {confirmDelete.title || "Untitled"}
-              </code>{" "}
-              — to confirm
-            </>
-          }
-          message={
-            <>
-              <p>
-                <strong>{confirmDelete.title || "Untitled"}</strong> will be
-                removed from this browser
-                {confirmDelete.imageCount > 0 && (
-                  <>
-                    , along with{" "}
-                    <strong>
-                      {confirmDelete.imageCount} generated image
-                      {confirmDelete.imageCount === 1 ? "" : "s"}
-                    </strong>
-                  </>
-                )}
-                .
-              </p>
-              <p className="confirm-note">
-                Stories live only in this browser, so there is no copy on a
-                server to fall back on. You will get a short window to undo —
-                after that it is gone for good. Export first if you want to
-                keep it.
-              </p>
-            </>
-          }
-          onConfirm={handleConfirmDeleteStory}
-          onCancel={handleCancelDeleteStory}
+          {...confirmProps(confirm)}
+          onConfirm={handleAcceptConfirm}
+          onCancel={handleCancelConfirm}
         />
       )}
 
-      {/* Undo window after a delete */}
-      {deleted && (
+      {/* Undo window after a deletion */}
+      {undo && (
         <UndoToast
-          message={`Deleted "${deleted.title || "Untitled"}"`}
-          onUndo={handleUndoDelete}
+          key={undo.undoId}
+          message={undo.message}
+          onUndo={handleUndo}
           onDismiss={handleDismissUndo}
         />
       )}
