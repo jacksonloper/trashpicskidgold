@@ -615,9 +615,33 @@
   cursor: pointer;
 }
 
-.btn-danger-solid:hover {
+.btn-danger-solid:hover:not(:disabled) {
   background: #a01b1b;
   border-color: #a01b1b;
+}
+
+.btn-danger-solid:disabled {
+  background: #e0a3a3;
+  border-color: #e0a3a3;
+  cursor: not-allowed;
+}
+
+.confirm-phrase {
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: #f1f1f1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  word-break: break-word;
+}
+
+.confirm-modal .caption-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.confirm-modal .confirm-note {
+  margin: 0.35rem 0 0;
 }
 
 /* ---- Undo toast ---- */

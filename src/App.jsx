@@ -807,6 +807,16 @@ export default function App() {
         <ConfirmDialog
           title="Delete this story?"
           confirmLabel="🗑️ Delete story"
+          confirmPhrase={confirmDelete.title || "Untitled"}
+          phraseLabel={
+            <>
+              Type the story title —{" "}
+              <code className="confirm-phrase">
+                {confirmDelete.title || "Untitled"}
+              </code>{" "}
+              — to confirm
+            </>
+          }
           message={
             <>
               <p>
