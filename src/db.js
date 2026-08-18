@@ -95,6 +95,15 @@ export function newImageId() {
   return crypto.randomUUID();
 }
 
+/**
+ * Sections are addressed by id rather than by array position so that a
+ * removal or reorder can never misroute an in-flight illustration onto a
+ * different panel.
+ */
+export function newSectionId() {
+  return crypto.randomUUID();
+}
+
 export const DEFAULT_STYLE =
   "Children's book illustration in a warm, whimsical watercolor style with soft edges and bright cheerful colors. Simple, rounded shapes suitable for ages 4-7.";
 
@@ -119,6 +128,7 @@ export function createBlankStory(id) {
  * Handles:
  *  - characterSheetImageId → referenceGraphics array  (v1 → v2)
  *  - characters array → dropped; style field added    (v2 → v3)
+ *  - sections given stable ids                        (v3 → v4)
  *
  * Returns a new object if migration was needed, or the original if already current.
  */
@@ -161,6 +171,17 @@ export function migrateStory(story) {
         kind: rg.kind || "other",
         prompt: rg.prompt ?? "",
       })),
+    };
+    changed = true;
+  }
+
+  // v3 → v4: every section carries a stable id
+  if ((blob.sections ?? []).some((sec) => !sec.id)) {
+    blob = {
+      ...blob,
+      sections: blob.sections.map((sec) =>
+        sec.id ? sec : { ...sec, id: newSectionId() }
+      ),
     };
     changed = true;
   }

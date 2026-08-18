@@ -9,6 +9,7 @@
 import {
   newStoryId,
   newImageId,
+  newSectionId,
   saveStory,
   saveImage,
   DEFAULT_STYLE,
@@ -98,7 +99,11 @@ export async function loadExampleStory() {
   const builtSections = [];
   for (const sec of SECTIONS) {
     if (sec.type === "markdown") {
-      builtSections.push({ type: "markdown", content: sec.content });
+      builtSections.push({
+        id: newSectionId(),
+        type: "markdown",
+        content: sec.content,
+      });
     } else {
       const dataUrl = await fetchAsDataUrl(`/example/${sec.imageFile}`);
       const imgId = newImageId();
@@ -109,7 +114,12 @@ export async function loadExampleStory() {
         data: dataUrl,
         characterReferenceId: charSheetImgId,
       });
-      builtSections.push({ type: "illustration", caption: sec.caption, imageId: imgId });
+      builtSections.push({
+        id: newSectionId(),
+        type: "illustration",
+        caption: sec.caption,
+        imageId: imgId,
+      });
     }
   }
 
