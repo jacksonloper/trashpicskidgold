@@ -1,44 +1,16 @@
-import JSZip from "jszip";
 import { getImage } from "../db";
-
-/**
- * Convert a data-URL to a Uint8Array + mime string.
- */
-function dataUrlToBytes(dataUrl) {
-  const [header, b64] = dataUrl.split(",");
-  const mime = header.split(":")[1].split(";")[0];
-  const raw = atob(b64);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return { bytes, mime };
-}
-
-function extensionForMime(mime) {
-  if (mime === "image/jpeg") return "jpg";
-  if (mime === "image/webp") return "webp";
-  return "png";
-}
+import {
+  buildStoryBundle,
+  collectImageIds,
+  slugify,
+} from "../storyBundle";
 
 /**
  * Gather all image ids referenced by a story and return them loaded.
  */
 async function loadStoryImageMap(story) {
-  const ids = new Set();
-  const blob = story.jsonblob;
-
-  // Reference graphic images
-  for (const rg of blob.referenceGraphics ?? []) {
-    if (rg.imageId) ids.add(rg.imageId);
-  }
-
-  // Legacy support
-  if (blob.characterSheetImageId) ids.add(blob.characterSheetImageId);
-
-  for (const sec of blob.sections) {
-    if (sec.type === "illustration" && sec.imageId) ids.add(sec.imageId);
-  }
   const map = {};
-  for (const id of ids) {
+  for (const id of collectImageIds(story)) {
     const rec = await getImage(id);
     if (rec) map[id] = rec;
   }
@@ -84,37 +56,14 @@ function buildMarkdown(story, imageFiles) {
   return lines.join("\n");
 }
 
-function sanitizeFilename(name, fallback) {
-  return (name || fallback).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
-}
-
 /**
- * Export story as a ZIP (story.json + images/ + story.md).
+ * Export story as a ZIP bundle — see src/storyBundle.js for the layout.
+ * The same file can be handed back to Import.
  */
 async function exportToZip(story) {
-  const zip = new JSZip();
   const imageMap = await loadStoryImageMap(story);
-  const imageFiles = {}; // imageId -> filename
-
-  // Add images
-  const imagesFolder = zip.folder("images");
-  let counter = 0;
-  for (const [id, rec] of Object.entries(imageMap)) {
-    const { bytes, mime } = dataUrlToBytes(rec.data);
-    const ext = extensionForMime(mime);
-    const prefix = String(counter).padStart(2, "0");
-    const filename = `${prefix}_${sanitizeFilename(rec.caption, id)}.${ext}`;
-    imagesFolder.file(filename, bytes);
-    imageFiles[id] = filename;
-    counter++;
-  }
-
-  // Add story.json
-  zip.file("story.json", JSON.stringify(story.jsonblob, null, 2));
-
-  // Add convenience markdown
+  const { zip, imageFiles } = buildStoryBundle(story, imageMap);
   zip.file("story.md", buildMarkdown(story, imageFiles));
-
   const blob = await zip.generateAsync({ type: "blob" });
   downloadBlob(blob, `${slugify(story.title)}.zip`);
 }
@@ -188,13 +137,6 @@ function escHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function slugify(s) {
-  return (s || "story")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -215,7 +157,8 @@ export default function ExportButtons({ story }) {
     <section className="card export-section">
       <h2>💾 Export</h2>
       <p className="section-description">
-        Download your story for safekeeping.
+        Download your story for safekeeping. The ZIP can be loaded back in with
+        Import.
       </p>
       <div className="export-row">
         <button
