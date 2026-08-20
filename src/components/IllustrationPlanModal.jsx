@@ -8,6 +8,8 @@ import { IMAGE_MODELS } from "../gemini";
  *
  * Props:
  *   plan          – { prompt, referenceImageIds }
+ *   notice        – optional warning to show above the prompt (damaged reply,
+ *                   failed generation) so the user knows why they are here
  *   allImages     – { imageId: dataUrl } map of all loaded images
  *   referenceGraphics – array of {id, label, imageId}
  *   sections      – story sections (for illustration images)
@@ -16,6 +18,7 @@ import { IMAGE_MODELS } from "../gemini";
  */
 export default function IllustrationPlanModal({
   plan,
+  notice,
   allImages,
   referenceGraphics,
   sections,
@@ -26,7 +29,10 @@ export default function IllustrationPlanModal({
   const [selectedIds, setSelectedIds] = useState(
     () => new Set(plan.referenceImageIds)
   );
-  const [imageModel, setImageModel] = useState(IMAGE_MODELS[0].id);
+  // Reopened after a failed generation, the plan carries the model they picked.
+  const [imageModel, setImageModel] = useState(
+    plan.imageModel || IMAGE_MODELS[0].id
+  );
 
   // Build a list of all candidate images (ref graphics + existing illustrations)
   const candidates = [];
@@ -68,6 +74,12 @@ export default function IllustrationPlanModal({
     <div className="plan-modal-overlay" onClick={onCancel}>
       <div className="plan-modal" onClick={(e) => e.stopPropagation()}>
         <h3>Review Illustration Plan</h3>
+
+        {notice && (
+          <p className="plan-notice" role="alert">
+            {notice}
+          </p>
+        )}
 
         <label className="plan-label">Prompt</label>
         <textarea

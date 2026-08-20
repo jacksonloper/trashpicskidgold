@@ -42,15 +42,192 @@ export function buildRefGraphicPrompt(style, kind, userPrompt, label) {
   return `${style}\n\n${userPrompt}`;
 }
 
+/* ---- planner reply parsing ---- */
+
+/**
+ * Collect the answer text from a generateContent response.
+ *
+ * Gemini is free to split one answer across several `parts`, and thinking
+ * models put their scratchpad in parts flagged `thought`.  Reading only the
+ * first text part drops the rest of the reply on the floor, which is how a
+ * perfectly good plan turns into "Expected ',' or '}' after property value
+ * in JSON at position N" — the fragment ends cleanly in the middle.
+ *
+ * @param {object} data – parsed generateContent response
+ * @returns {{text:string, finishReason:string|null}}
+ */
+function collectAnswerText(data) {
+  const candidate = data.candidates?.[0];
+  const parts = candidate?.content?.parts ?? [];
+  const text = parts
+    .filter((p) => typeof p.text === "string" && !p.thought)
+    .map((p) => p.text)
+    .join("");
+  return { text, finishReason: candidate?.finishReason ?? null };
+}
+
+/** Unwrap ```json … ``` fencing, wherever in the reply it sits. */
+function stripCodeFences(text) {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) return fenced[1].trim();
+  return text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+}
+
+/**
+ * Read a JSON string value out of text that does not parse as JSON.
+ *
+ * Walks the value character by character so an unterminated string (a reply
+ * that was cut off) still gives back everything written so far, then trims
+ * any dangling escape so the result can be unescaped.
+ *
+ * @returns {string|null} the unescaped value, or null if the key isn't there
+ */
+function salvageString(text, key) {
+  const keyAt = text.indexOf(`"${key}"`);
+  if (keyAt === -1) return null;
+  const colon = text.indexOf(":", keyAt + key.length + 2);
+  if (colon === -1) return null;
+
+  let i = colon + 1;
+  while (i < text.length && /\s/.test(text[i])) i++;
+  if (text[i] !== '"') return null;
+  i++;
+
+  let body = "";
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "\\") {
+      body += text.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (ch === '"') break;
+    body += ch;
+    i++;
+  }
+
+  // A cut-off reply can end mid-escape ("\", "\u12"); shave the tail until
+  // what's left is a legal JSON string.  Escapes are at most 6 characters.
+  for (let cut = 0; cut <= 6 && cut <= body.length; cut++) {
+    try {
+      return JSON.parse(`"${body.slice(0, body.length - cut)}"`);
+    } catch {
+      // keep shaving
+    }
+  }
+  return null;
+}
+
+/** Read the complete quoted strings out of an array field. */
+function salvageStringArray(text, key) {
+  const keyAt = text.indexOf(`"${key}"`);
+  if (keyAt === -1) return [];
+  const open = text.indexOf("[", keyAt);
+  if (open === -1) return [];
+  const close = text.indexOf("]", open);
+  const body = text.slice(open + 1, close === -1 ? text.length : close);
+  return [...body.matchAll(/"((?:[^"\\]|\\.)*)"/g)]
+    .map((m) => {
+      try {
+        return JSON.parse(`"${m[1]}"`);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+/** Human-readable tail for an error message when the model stopped early. */
+function finishReasonNote(finishReason) {
+  if (!finishReason || finishReason === "STOP") return "";
+  if (finishReason === "MAX_TOKENS")
+    return " The model hit its output limit — try the Fast planning model, or shorten the story.";
+  return ` The model stopped early (${finishReason}).`;
+}
+
+/**
+ * Turn the planner's reply into a plan.
+ *
+ * Strict JSON first.  Failing that, the object is dug out of any surrounding
+ * chatter, and failing *that* the fields are salvaged by hand so a reply that
+ * arrived damaged still gives the user something to edit rather than nothing
+ * at all.  A salvaged plan is flagged `partial` so callers can insist on a
+ * human look before spending an image generation on it.
+ *
+ * Exported for testing.
+ *
+ * @param {string} text          – raw reply text
+ * @param {string|null} [finishReason]
+ * @returns {{prompt:string, referenceImageIds:string[], partial:boolean}}
+ */
+export function parsePlannerReply(text, finishReason = null) {
+  const raw = stripCodeFences(text ?? "");
+
+  const shape = (plan, partial) => {
+    const prompt = typeof plan.prompt === "string" ? plan.prompt.trim() : "";
+    if (!prompt) {
+      throw new Error(
+        "The planning model didn't return a prompt." +
+          finishReasonNote(finishReason) +
+          " Nothing in your story was changed — try again."
+      );
+    }
+    return {
+      prompt,
+      referenceImageIds: Array.isArray(plan.referenceImageIds)
+        ? plan.referenceImageIds.filter((id) => typeof id === "string")
+        : [],
+      partial,
+    };
+  };
+
+  try {
+    return shape(JSON.parse(raw), false);
+  } catch (err) {
+    if (!(err instanceof SyntaxError)) throw err;
+  }
+
+  // Chatter around the object, or a trailing second object.
+  const open = raw.indexOf("{");
+  const close = raw.lastIndexOf("}");
+  if (open !== -1 && close > open) {
+    try {
+      return shape(JSON.parse(raw.slice(open, close + 1)), false);
+    } catch (err) {
+      if (!(err instanceof SyntaxError)) throw err;
+    }
+  }
+
+  const prompt = salvageString(raw, "prompt");
+  if (prompt && prompt.trim()) {
+    return shape(
+      { prompt, referenceImageIds: salvageStringArray(raw, "referenceImageIds") },
+      true
+    );
+  }
+
+  throw new Error(
+    "The planning model's reply wasn't valid JSON, so the illustration " +
+      "couldn't be planned." +
+      finishReasonNote(finishReason) +
+      " Nothing in your story was changed — try again."
+  );
+}
+
 /**
  * Query the Gemini chat completion to plan an illustration.
  *
- * Given the full story context, returns a JSON object:
- *   { prompt: string, referenceImageIds: string[] }
+ * Given the full story context, returns:
+ *   { prompt: string, referenceImageIds: string[], partial: boolean }
  *
  * The prompt is a detailed image-generation prompt and referenceImageIds lists
  * which reference graphics and/or existing illustration image IDs should be
- * attached when generating.
+ * attached when generating.  `partial` is true when the reply arrived damaged
+ * and the plan had to be salvaged, so the caller should have the user review
+ * it before generating.
  *
  * @param {string} apiKey
  * @param {string} style         – illustration style description
@@ -59,7 +236,7 @@ export function buildRefGraphicPrompt(style, kind, userPrompt, label) {
  * @param {string} targetCaption – the caption for the illustration to generate
  * @param {Object<string,string>} allImages – imageId → dataUrl map of all loaded images
  * @param {string} [model]      – Gemini model to use (defaults to quality)
- * @returns {Promise<{prompt:string, referenceImageIds:string[]}>}
+ * @returns {Promise<{prompt:string, referenceImageIds:string[], partial:boolean}>}
  */
 export async function planIllustration(
   apiKey,
@@ -156,22 +333,16 @@ export async function planIllustration(
   }
 
   const data = await res.json();
-  const textPart = data.candidates?.[0]?.content?.parts?.find((p) => p.text);
-  if (!textPart) throw new Error("No text in Gemini planning response");
+  const { text, finishReason } = collectAnswerText(data);
+  if (!text.trim()) {
+    throw new Error(
+      "The planning model returned no text." +
+        finishReasonNote(finishReason) +
+        " Nothing in your story was changed — try again."
+    );
+  }
 
-  // Strip possible markdown fences
-  const raw = textPart.text
-    .replace(/^```json\s*/i, "")
-    .replace(/```\s*$/, "")
-    .trim();
-  const plan = JSON.parse(raw);
-
-  return {
-    prompt: plan.prompt ?? "",
-    referenceImageIds: Array.isArray(plan.referenceImageIds)
-      ? plan.referenceImageIds
-      : [],
-  };
+  return parsePlannerReply(text, finishReason);
 }
 
 /**
