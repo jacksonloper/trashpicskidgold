@@ -485,20 +485,35 @@ export async function generateImageWithReferences(
 }
 
 /**
- * Extract the first image from a Gemini generateContent response.
+ * Extract the finished image from a Gemini generateContent response.
+ *
+ * Gemini 3's image models think in pictures: before the real image they emit
+ * up to two interim drafts — testing composition and lighting — as parts
+ * flagged `thought`.  Taking the first inlineData part hands back one of those
+ * drafts, which is how a generation occasionally comes back looking nothing
+ * like the prompt.  The finished image is the last one the model emits, so
+ * prefer the last unflagged image and fall back to the last image of any kind
+ * for models that don't flag their drafts.
+ *
  * @param {object} data
  * @returns {string} data URL
  */
 function extractImageFromResponse(data) {
-  const candidates = data.candidates || [];
-  for (const candidate of candidates) {
-    const parts = candidate.content?.parts || [];
-    for (const part of parts) {
-      if (part.inlineData) {
-        const { mimeType, data: b64 } = part.inlineData;
-        return `data:${mimeType};base64,${b64}`;
+  const images = [];
+  for (const candidate of data.candidates || []) {
+    for (const part of candidate.content?.parts || []) {
+      if (part.inlineData?.data) {
+        images.push({
+          mimeType: part.inlineData.mimeType,
+          b64: part.inlineData.data,
+          thought: part.thought === true,
+        });
       }
     }
   }
-  throw new Error("No image found in Gemini response");
+
+  const finished = images.filter((img) => !img.thought);
+  const chosen = (finished.length > 0 ? finished : images).at(-1);
+  if (!chosen) throw new Error("No image found in Gemini response");
+  return `data:${chosen.mimeType};base64,${chosen.b64}`;
 }
