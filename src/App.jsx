@@ -45,6 +45,15 @@ function sectionTitle(sec, index) {
     : `Text Block ${index + 1}`;
 }
 
+/** Warning shown above a plan the model didn't deliver cleanly. */
+function planNotice(plan) {
+  return plan.partial
+    ? "The planner's reply arrived damaged, so this prompt was recovered from " +
+        "the part that did come through. Read it over — and re-check the " +
+        "reference images — before generating."
+    : null;
+}
+
 /**
  * Dialog copy for a pending destructive action.
  *
@@ -807,6 +816,10 @@ export default function App() {
     async (sectionId, textModel) => {
       const sec = sections.find((x) => x.id === sectionId);
       if (!sec) return null;
+      // A caption typed a moment ago is still sitting in the 500 ms debounce.
+      // Planning takes seconds and can fail, so put the edit on disk first —
+      // whatever the model does, the user's own words are already saved.
+      await flushSave();
       setError(null);
       setPlanningSections((prev) => ({ ...prev, [sectionId]: true }));
       try {
@@ -826,13 +839,18 @@ export default function App() {
         setPlanningSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [apiKey, allImages, style, referenceGraphics, sections]
+    [apiKey, allImages, flushSave, style, referenceGraphics, sections]
   );
 
-  /** Generate + persist the image for a section from a finished plan. */
+  /**
+   * Generate + persist the image for a section from a finished plan.
+   * Returns { ok, error } so a caller holding the plan can decide what to do
+   * with it rather than having to watch the error banner.
+   */
   const runGenerate = useCallback(
     async (sectionId, plan) => {
-      if (!story) return;
+      if (!story) return { ok: false, error: null };
+      await flushSave();
       setError(null);
       setGeneratingSections((prev) => ({ ...prev, [sectionId]: true }));
 
@@ -867,13 +885,15 @@ export default function App() {
         setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
         // Dropped harmlessly if the page was removed while this was in flight.
         updateSectionField(sectionId, "imageId", imgId);
+        return { ok: true, error: null };
       } catch (err) {
         setError(err.message);
+        return { ok: false, error: err.message };
       } finally {
         setGeneratingSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [apiKey, allImages, sections, story, updateSectionField]
+    [apiKey, allImages, flushSave, sections, story, updateSectionField]
   );
 
   /** Plan only, then open the review modal. */
@@ -881,26 +901,58 @@ export default function App() {
     async (sectionId, textModel) => {
       if (!story) return;
       const plan = await runPlan(sectionId, textModel);
-      if (plan) setIllustrationPlan({ sectionId, ...plan });
+      if (plan) {
+        setIllustrationPlan({ sectionId, ...plan, notice: planNotice(plan) });
+      }
     },
     [runPlan, story]
   );
 
-  /** One-shot: plan and immediately generate, skipping the review modal. */
+  /**
+   * One-shot: plan and immediately generate, skipping the review modal.
+   *
+   * A plan that had to be salvaged from a damaged reply stops at the modal
+   * instead — better to have the user look at a half-recovered prompt than to
+   * spend a generation on it and replace the panel's artwork with the result.
+   */
   const handleGenerateIllustration = useCallback(
     async (sectionId, textModel, imageModel) => {
       if (!story) return;
       const plan = await runPlan(sectionId, textModel);
-      if (plan) await runGenerate(sectionId, { ...plan, imageModel });
+      if (!plan) return;
+      if (plan.partial) {
+        setIllustrationPlan({
+          sectionId,
+          ...plan,
+          imageModel,
+          notice: planNotice(plan),
+        });
+        return;
+      }
+      await runGenerate(sectionId, { ...plan, imageModel });
     },
     [runGenerate, runPlan, story]
   );
 
+  /**
+   * The modal closes as generation starts, but a failed generation would
+   * otherwise take the reviewed prompt with it — so put it back on failure.
+   */
   const handleApproveIllustration = useCallback(
     async (approvedPlan) => {
       const { sectionId } = illustrationPlan;
       setIllustrationPlan(null);
-      await runGenerate(sectionId, approvedPlan);
+      const { ok, error: failure } = await runGenerate(sectionId, approvedPlan);
+      if (!ok) {
+        setIllustrationPlan({
+          sectionId,
+          ...approvedPlan,
+          notice:
+            (failure ? `That generation failed — ${failure} ` : "") +
+            "Your prompt and reference picks are still here, so you can " +
+            "adjust them and try again.",
+        });
+      }
     },
     [illustrationPlan, runGenerate]
   );
@@ -1098,6 +1150,7 @@ export default function App() {
       {illustrationPlan && (
         <IllustrationPlanModal
           plan={illustrationPlan}
+          notice={illustrationPlan.notice}
           allImages={allImages}
           referenceGraphics={referenceGraphics}
           sections={sections}
