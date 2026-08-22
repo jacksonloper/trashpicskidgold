@@ -172,6 +172,31 @@ export default function App() {
   );
 
   /**
+   * The current story and everything derived from it, kept in a ref.
+   *
+   * Every keystroke replaces the story object, so a callback that closes over
+   * it is a new function on every render — which would defeat the memoized
+   * section cards below and put the whole page's re-render back on the typing
+   * path. Callbacks that only need these values *when they run* read them from
+   * here instead, and stay identity-stable across keystrokes.
+   */
+  const latestRef = useRef({
+    sections: [],
+    referenceGraphics: [],
+    allImages: {},
+  });
+  useEffect(() => {
+    latestRef.current = {
+      story,
+      sections,
+      style,
+      referenceGraphics,
+      allImages,
+      apiKey,
+    };
+  });
+
+  /**
    * Immediately persist whatever is in dirtyStoryRef and clear it.
    * Safe to call even when nothing is dirty.
    */
@@ -517,9 +542,10 @@ export default function App() {
   /** Remove a reference graphic, keeping a snapshot the toast can put back. */
   const removeRefGraphicNow = useCallback(
     (rgId) => {
-      const index = referenceGraphics.findIndex((rg) => rg.id === rgId);
+      const { referenceGraphics: refs, story } = latestRef.current;
+      const index = refs.findIndex((rg) => rg.id === rgId);
       if (index === -1 || !story) return;
-      const removed = referenceGraphics[index];
+      const removed = refs[index];
       updateStory((s) => ({
         ...s,
         jsonblob: {
@@ -538,13 +564,13 @@ export default function App() {
         index,
       });
     },
-    [referenceGraphics, story, updateStory]
+    [updateStory]
   );
 
   /** ✕ on a reference graphic: ask first when there is an image to lose. */
   const handleRemoveRefGraphic = useCallback(
     (rgId) => {
-      const rg = referenceGraphics.find((x) => x.id === rgId);
+      const rg = latestRef.current.referenceGraphics.find((x) => x.id === rgId);
       if (!rg) return;
       if (rg.imageId) {
         setConfirm({
@@ -556,7 +582,7 @@ export default function App() {
         removeRefGraphicNow(rgId);
       }
     },
-    [referenceGraphics, removeRefGraphicNow]
+    [removeRefGraphicNow]
   );
 
   const handleUpdateRefLabel = useCallback(
@@ -589,6 +615,7 @@ export default function App() {
 
   const handleGenerateRefGraphic = useCallback(
     async (rgId, kind, userPrompt, imageModel, label) => {
+      const { story, style, apiKey } = latestRef.current;
       if (!story) return;
       setError(null);
       setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
@@ -621,11 +648,12 @@ export default function App() {
         setGeneratingRefIds((prev) => ({ ...prev, [rgId]: false }));
       }
     },
-    [apiKey, style, story, updateStory]
+    [updateStory]
   );
 
   const handleUploadRefGraphic = useCallback(
     async (rgId, dataUrl) => {
+      const { story } = latestRef.current;
       if (!story) return;
       setError(null);
       try {
@@ -651,7 +679,7 @@ export default function App() {
         setError(err.message);
       }
     },
-    [story, updateStory]
+    [updateStory]
   );
 
   /* ---- sections ---- */
@@ -674,9 +702,10 @@ export default function App() {
   /** Remove a section, keeping a snapshot the toast can put back. */
   const removeSectionNow = useCallback(
     (sectionId) => {
-      const index = sections.findIndex((sec) => sec.id === sectionId);
+      const { sections: secs, story } = latestRef.current;
+      const index = secs.findIndex((sec) => sec.id === sectionId);
       if (index === -1 || !story) return;
-      const removed = sections[index];
+      const removed = secs[index];
       updateStory((s) => ({
         ...s,
         jsonblob: {
@@ -693,15 +722,16 @@ export default function App() {
         index,
       });
     },
-    [sections, story, updateStory]
+    [updateStory]
   );
 
   /** ✕ on a section: ask first when there is a generated illustration to lose. */
   const handleRemoveSection = useCallback(
     (sectionId) => {
-      const index = sections.findIndex((sec) => sec.id === sectionId);
+      const { sections: secs } = latestRef.current;
+      const index = secs.findIndex((sec) => sec.id === sectionId);
       if (index === -1) return;
-      const sec = sections[index];
+      const sec = secs[index];
       if (sec.type === "illustration" && sec.imageId) {
         setConfirm({
           kind: "section",
@@ -712,7 +742,7 @@ export default function App() {
         removeSectionNow(sectionId);
       }
     },
-    [removeSectionNow, sections]
+    [removeSectionNow]
   );
 
   /**
@@ -814,6 +844,8 @@ export default function App() {
    */
   const runPlan = useCallback(
     async (sectionId, textModel) => {
+      const { sections, style, referenceGraphics, allImages, apiKey } =
+        latestRef.current;
       const sec = sections.find((x) => x.id === sectionId);
       if (!sec) return null;
       // A caption typed a moment ago is still sitting in the 500 ms debounce.
@@ -839,7 +871,7 @@ export default function App() {
         setPlanningSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [apiKey, allImages, flushSave, style, referenceGraphics, sections]
+    [flushSave]
   );
 
   /**
@@ -849,6 +881,7 @@ export default function App() {
    */
   const runGenerate = useCallback(
     async (sectionId, plan) => {
+      const { story, allImages, sections, apiKey } = latestRef.current;
       if (!story) return { ok: false, error: null };
       await flushSave();
       setError(null);
@@ -893,19 +926,19 @@ export default function App() {
         setGeneratingSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [apiKey, allImages, flushSave, sections, story, updateSectionField]
+    [flushSave, updateSectionField]
   );
 
   /** Plan only, then open the review modal. */
   const handlePlanIllustration = useCallback(
     async (sectionId, textModel) => {
-      if (!story) return;
+      if (!latestRef.current.story) return;
       const plan = await runPlan(sectionId, textModel);
       if (plan) {
         setIllustrationPlan({ sectionId, ...plan, notice: planNotice(plan) });
       }
     },
-    [runPlan, story]
+    [runPlan]
   );
 
   /**
@@ -917,7 +950,7 @@ export default function App() {
    */
   const handleGenerateIllustration = useCallback(
     async (sectionId, textModel, imageModel) => {
-      if (!story) return;
+      if (!latestRef.current.story) return;
       const plan = await runPlan(sectionId, textModel);
       if (!plan) return;
       if (plan.partial) {
@@ -931,7 +964,7 @@ export default function App() {
       }
       await runGenerate(sectionId, { ...plan, imageModel });
     },
-    [runGenerate, runPlan, story]
+    [runGenerate, runPlan]
   );
 
   /**
@@ -958,6 +991,28 @@ export default function App() {
   );
 
   const handleCancelPlan = useCallback(() => setIllustrationPlan(null), []);
+
+  /* ---- stable callbacks for the memoized section cards ---- */
+
+  const handleCaptionChange = useCallback(
+    (sectionId, val) => updateSectionField(sectionId, "caption", val),
+    [updateSectionField]
+  );
+
+  const handleContentChange = useCallback(
+    (sectionId, val) => updateSectionField(sectionId, "content", val),
+    [updateSectionField]
+  );
+
+  const handleMoveSectionUp = useCallback(
+    (sectionId) => moveSection(sectionId, -1),
+    [moveSection]
+  );
+
+  const handleMoveSectionDown = useCallback(
+    (sectionId) => moveSection(sectionId, 1),
+    [moveSection]
+  );
 
   /* ---- render ---- */
 
@@ -1048,26 +1103,31 @@ export default function App() {
                   reference graphics to keep characters consistent.
                 </p>
 
+                {/*
+                  Every prop below is either a value off this one section or a
+                  callback with a stable identity, so a keystroke in one card
+                  re-renders that card alone — see the memo() on both
+                  components. Handlers take the section id rather than closing
+                  over it, which is what keeps them stable.
+                */}
                 {sections.map((sec, idx) =>
                   sec.type === "markdown" ? (
                     <MarkdownSection
                       key={sec.id}
+                      id={sec.id}
                       index={idx}
                       content={sec.content}
-                      onContentChange={(val) =>
-                        updateSectionField(sec.id, "content", val)
-                      }
-                      onRemove={() => handleRemoveSection(sec.id)}
-                      onMoveUp={idx > 0 ? () => moveSection(sec.id, -1) : null}
-                      onMoveDown={
-                        idx < sections.length - 1
-                          ? () => moveSection(sec.id, 1)
-                          : null
-                      }
+                      onContentChange={handleContentChange}
+                      onRemove={handleRemoveSection}
+                      canMoveUp={idx > 0}
+                      canMoveDown={idx < sections.length - 1}
+                      onMoveUp={handleMoveSectionUp}
+                      onMoveDown={handleMoveSectionDown}
                     />
                   ) : (
                     <Illustration
                       key={sec.id}
+                      id={sec.id}
                       index={idx}
                       caption={sec.caption}
                       imageUrl={
@@ -1075,22 +1135,14 @@ export default function App() {
                       }
                       generating={!!generatingSections[sec.id]}
                       planning={!!planningSections[sec.id]}
-                      onCaptionChange={(val) =>
-                        updateSectionField(sec.id, "caption", val)
-                      }
-                      onGenerateIllustration={(textModel, imageModel) =>
-                        handleGenerateIllustration(sec.id, textModel, imageModel)
-                      }
-                      onPlanIllustration={(textModel) =>
-                        handlePlanIllustration(sec.id, textModel)
-                      }
-                      onRemove={() => handleRemoveSection(sec.id)}
-                      onMoveUp={idx > 0 ? () => moveSection(sec.id, -1) : null}
-                      onMoveDown={
-                        idx < sections.length - 1
-                          ? () => moveSection(sec.id, 1)
-                          : null
-                      }
+                      onCaptionChange={handleCaptionChange}
+                      onGenerateIllustration={handleGenerateIllustration}
+                      onPlanIllustration={handlePlanIllustration}
+                      onRemove={handleRemoveSection}
+                      canMoveUp={idx > 0}
+                      canMoveDown={idx < sections.length - 1}
+                      onMoveUp={handleMoveSectionUp}
+                      onMoveDown={handleMoveSectionDown}
                     />
                   )
                 )}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { IMAGE_MODELS } from "../gemini";
 
 const KIND_OPTIONS = [
@@ -7,7 +7,7 @@ const KIND_OPTIONS = [
   { value: "other", label: "📎 Other" },
 ];
 
-export default function ReferenceGraphics({
+function ReferenceGraphics({
   referenceGraphics,
   refImages,
   onAdd,
@@ -178,3 +178,6 @@ export default function ReferenceGraphics({
     </section>
   );
 }
+
+/* Memoized: its props don't change while the user types elsewhere. */
+export default memo(ReferenceGraphics);

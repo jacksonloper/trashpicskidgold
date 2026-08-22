@@ -1,8 +1,20 @@
-export default function MarkdownSection({
+import { memo } from "react";
+
+/**
+ * A text block in the story.
+ *
+ * Memoized, and every callback takes the section id rather than being bound to
+ * it by the parent — a story can run to dozens of sections, and without this
+ * each keystroke anywhere re-renders every one of them.
+ */
+function MarkdownSection({
+  id,
   index,
   content,
   onContentChange,
   onRemove,
+  canMoveUp,
+  canMoveDown,
   onMoveUp,
   onMoveDown,
 }) {
@@ -14,8 +26,8 @@ export default function MarkdownSection({
           <button
             type="button"
             className="btn-move"
-            onClick={onMoveUp}
-            disabled={!onMoveUp}
+            onClick={() => onMoveUp(id)}
+            disabled={!canMoveUp}
             title="Move up"
           >
             ▲
@@ -23,8 +35,8 @@ export default function MarkdownSection({
           <button
             type="button"
             className="btn-move"
-            onClick={onMoveDown}
-            disabled={!onMoveDown}
+            onClick={() => onMoveDown(id)}
+            disabled={!canMoveDown}
             title="Move down"
           >
             ▼
@@ -32,7 +44,7 @@ export default function MarkdownSection({
           <button
             type="button"
             className="btn-remove"
-            onClick={onRemove}
+            onClick={() => onRemove(id)}
             title="Remove text block"
           >
             ✕
@@ -45,8 +57,10 @@ export default function MarkdownSection({
         rows={4}
         placeholder="Write story text here (supports markdown)"
         value={content}
-        onChange={(e) => onContentChange(e.target.value)}
+        onChange={(e) => onContentChange(id, e.target.value)}
       />
     </div>
   );
 }
+
+export default memo(MarkdownSection);
