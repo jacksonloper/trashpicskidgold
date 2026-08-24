@@ -8,6 +8,7 @@ import ReferenceGraphics from "./components/ReferenceGraphics";
 import Illustration from "./components/Illustration";
 import IllustrationPlanModal from "./components/IllustrationPlanModal";
 import MarkdownSection from "./components/MarkdownSection";
+import SectionIndex from "./components/SectionIndex";
 import ExportButtons from "./components/ExportButtons";
 import ConfirmDialog from "./components/ConfirmDialog";
 import UndoToast from "./components/UndoToast";
@@ -35,7 +36,11 @@ import {
   migrateStory,
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
-import { readStoryBundle, prepareForImport } from "./storyBundle";
+import {
+  readStoryBundle,
+  prepareForImport,
+  collectImageIds,
+} from "./storyBundle";
 import "./App.css";
 
 /** Heading a section shows on its card, used in undo/confirm copy. */
@@ -144,6 +149,7 @@ export default function App() {
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [storyList, setStoryList] = useState([]); // [{id, title}]
   const [activeStoryId, setActiveStoryId] = useState(null);
+  const [activeSectionId, setActiveSectionId] = useState(null); // section on screen
   const [story, setStory] = useState(null); // full story record or null
   const [allImages, setAllImages] = useState({}); // imageId → dataUrl
   const [generatingRefIds, setGeneratingRefIds] = useState({});
@@ -170,6 +176,21 @@ export default function App() {
     () => story?.jsonblob?.referenceGraphics ?? [],
     [story]
   );
+
+  /**
+   * The section being edited.
+   *
+   * Only this one is rendered — a story can run to seventy pages, and mounting
+   * all of them means every keystroke re-renders every card and every
+   * illustration sits decoded in memory at once. Falls back to the first
+   * section whenever the selection points at something that is no longer
+   * there (a removal, a story switch, an import).
+   */
+  const activeIndex = useMemo(() => {
+    const i = sections.findIndex((sec) => sec.id === activeSectionId);
+    return i === -1 ? (sections.length > 0 ? 0 : -1) : i;
+  }, [activeSectionId, sections]);
+  const activeSection = activeIndex === -1 ? null : sections[activeIndex];
 
   /**
    * Immediately persist whatever is in dirtyStoryRef and clear it.
@@ -296,23 +317,17 @@ export default function App() {
       s = migrateStory(s);
 
       setStory(s);
+      setActiveSectionId(s.jsonblob.sections[0]?.id ?? null);
 
-      // Load all images referenced by the story
+      // Only the reference graphics are loaded up front: they are few, every
+      // generation needs them, and they are what the plan modal offers as
+      // visual context. Page illustrations are megabytes each and only the
+      // open page needs one, so those load on demand — see below.
       const imgMap = {};
-
-      // Reference graphic images
       for (const rg of s.jsonblob.referenceGraphics ?? []) {
         if (rg.imageId) {
           const rec = await getImage(rg.imageId);
           if (rec) imgMap[rg.imageId] = rec.data;
-        }
-      }
-
-      // Section illustration images
-      for (const sec of s.jsonblob.sections) {
-        if (sec.type === "illustration" && sec.imageId) {
-          const rec = await getImage(sec.imageId);
-          if (rec) imgMap[sec.imageId] = rec.data;
         }
       }
       if (!cancelled) setAllImages(imgMap);
@@ -321,6 +336,45 @@ export default function App() {
       cancelled = true;
     };
   }, [activeStoryId]);
+
+  /* ---- the open section's illustration, loaded on demand ---- */
+
+  useEffect(() => {
+    const sec = sections.find((x) => x.id === activeSectionId);
+    const imageId = sec?.type === "illustration" ? sec.imageId : null;
+    if (!imageId || allImages[imageId]) return;
+    let cancelled = false;
+    (async () => {
+      const rec = await getImage(imageId);
+      if (cancelled || !rec) return;
+      setAllImages((prev) =>
+        prev[imageId] ? prev : { ...prev, [imageId]: rec.data }
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSectionId, sections, allImages]);
+
+  /**
+   * Pull in every illustration the story has that isn't in memory yet.
+   *
+   * The plan modal lets you pick any existing illustration as visual context,
+   * so before that modal opens the pictures have to actually be here — which
+   * is the one place the on-demand loading above isn't enough.
+   */
+  const loadAllStoryImages = useCallback(async (storyRec, known) => {
+    if (!storyRec) return;
+    const missing = collectImageIds(storyRec).filter((id) => !known[id]);
+    if (missing.length === 0) return;
+    const loaded = {};
+    for (const id of missing) {
+      const rec = await getImage(id);
+      if (rec) loaded[id] = rec.data;
+    }
+    // Anything that arrived while this ran wins over what was read here.
+    setAllImages((prev) => ({ ...loaded, ...prev }));
+  }, []);
 
   /* ---- story CRUD ---- */
 
@@ -350,9 +404,11 @@ export default function App() {
       kind: "story",
       id: activeStoryId,
       title: entry?.title || story?.title || "Untitled",
-      imageCount: Object.keys(allImages).length,
+      // Counted off the story itself: with images loading on demand, what is
+      // in memory is no longer what deletion would destroy.
+      imageCount: story ? collectImageIds(story).length : 0,
     });
-  }, [activeStoryId, allImages, story, storyList]);
+  }, [activeStoryId, story, storyList]);
 
   const deleteStoryNow = useCallback(
     async (id, title) => {
@@ -667,8 +723,18 @@ export default function App() {
         ...s,
         jsonblob: { ...s.jsonblob, sections: [...s.jsonblob.sections, sec] },
       }));
+      setActiveSectionId(id);
     },
     [updateStory]
+  );
+
+  const addMarkdownSection = useCallback(
+    () => addSection("markdown"),
+    [addSection]
+  );
+  const addIllustrationSection = useCallback(
+    () => addSection("illustration"),
+    [addSection]
   );
 
   /** Remove a section, keeping a snapshot the toast can put back. */
@@ -692,8 +758,13 @@ export default function App() {
         section: removed,
         index,
       });
+      // The page you were looking at just went away: land on its neighbour.
+      if (removed.id === activeSectionId) {
+        const next = sections[index + 1] ?? sections[index - 1] ?? null;
+        setActiveSectionId(next?.id ?? null);
+      }
     },
-    [sections, story, updateStory]
+    [activeSectionId, sections, story, updateStory]
   );
 
   /** ✕ on a section: ask first when there is a generated illustration to lose. */
@@ -752,6 +823,20 @@ export default function App() {
     [updateStory]
   );
 
+  /* ---- section navigation ---- */
+
+  const handleSelectSection = useCallback((id) => setActiveSectionId(id), []);
+
+  const handlePrevSection = useCallback(() => {
+    if (activeIndex > 0) setActiveSectionId(sections[activeIndex - 1].id);
+  }, [activeIndex, sections]);
+
+  const handleNextSection = useCallback(() => {
+    if (activeIndex > -1 && activeIndex < sections.length - 1) {
+      setActiveSectionId(sections[activeIndex + 1].id);
+    }
+  }, [activeIndex, sections]);
+
   /* ---- confirm / undo dispatch ---- */
 
   const handleCancelConfirm = useCallback(() => setConfirm(null), []);
@@ -804,6 +889,8 @@ export default function App() {
       next.splice(Math.min(pending.index, next.length), 0, item);
       return { ...s, jsonblob: { ...s.jsonblob, [key]: next } };
     });
+
+    if (pending.kind === "section") setActiveSectionId(item.id);
   }, [flushSave, undo, updateStory]);
 
   /* ---- illustration plan → generate ---- */
@@ -823,15 +910,21 @@ export default function App() {
       setError(null);
       setPlanningSections((prev) => ({ ...prev, [sectionId]: true }));
       try {
-        return await planIllustration(
-          apiKey,
-          style,
-          referenceGraphics,
-          sections,
-          sec.caption,
-          allImages,
-          textModel
-        );
+        // The picker in the review modal offers every existing illustration,
+        // so fetch the ones that aren't in memory while the model thinks.
+        const [plan] = await Promise.all([
+          planIllustration(
+            apiKey,
+            style,
+            referenceGraphics,
+            sections,
+            sec.caption,
+            allImages,
+            textModel
+          ),
+          loadAllStoryImages(story, allImages),
+        ]);
+        return plan;
       } catch (err) {
         setError(err.message);
         return null;
@@ -839,7 +932,16 @@ export default function App() {
         setPlanningSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [apiKey, allImages, flushSave, style, referenceGraphics, sections]
+    [
+      apiKey,
+      allImages,
+      flushSave,
+      loadAllStoryImages,
+      story,
+      style,
+      referenceGraphics,
+      sections,
+    ]
   );
 
   /**
@@ -858,7 +960,8 @@ export default function App() {
         // Collect reference images from the plan
         const refImgs = [];
         for (const imgId of plan.referenceImageIds) {
-          const dataUrl = allImages[imgId];
+          // May name an illustration from a page this session never opened.
+          const dataUrl = allImages[imgId] ?? (await getImage(imgId))?.data;
           if (dataUrl) {
             const base64 = dataUrl.split(",")[1];
             const mimeType = dataUrl.split(";")[0].split(":")[1];
@@ -1040,78 +1143,102 @@ export default function App() {
                 disabled={!apiKey.trim()}
               />
 
-              {/* Sections */}
-              <section className="card">
-                <h2>📚 Story Sections</h2>
-                <p className="section-description">
-                  Add text blocks and illustration pages. The AI uses your
-                  reference graphics to keep characters consistent.
-                </p>
+              {/* The story in order — pick a section to open it below */}
+              <SectionIndex
+                sections={sections}
+                activeId={activeSection?.id ?? null}
+                generatingSections={generatingSections}
+                planningSections={planningSections}
+                onSelect={handleSelectSection}
+                onAddMarkdown={addMarkdownSection}
+                onAddIllustration={addIllustrationSection}
+              />
 
-                {sections.map((sec, idx) =>
-                  sec.type === "markdown" ? (
+              {/* The one open section */}
+              {activeSection && (
+                <div className="section-editor">
+                  <div className="section-pager">
+                    <button
+                      type="button"
+                      className="btn-small"
+                      onClick={handlePrevSection}
+                      disabled={activeIndex <= 0}
+                    >
+                      ← Previous
+                    </button>
+                    <span className="section-pager-label">
+                      {activeIndex + 1} of {sections.length}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-small"
+                      onClick={handleNextSection}
+                      disabled={activeIndex >= sections.length - 1}
+                    >
+                      Next →
+                    </button>
+                  </div>
+
+                  {activeSection.type === "markdown" ? (
                     <MarkdownSection
-                      key={sec.id}
-                      index={idx}
-                      content={sec.content}
+                      key={activeSection.id}
+                      index={activeIndex}
+                      content={activeSection.content}
                       onContentChange={(val) =>
-                        updateSectionField(sec.id, "content", val)
+                        updateSectionField(activeSection.id, "content", val)
                       }
-                      onRemove={() => handleRemoveSection(sec.id)}
-                      onMoveUp={idx > 0 ? () => moveSection(sec.id, -1) : null}
+                      onRemove={() => handleRemoveSection(activeSection.id)}
+                      onMoveUp={
+                        activeIndex > 0
+                          ? () => moveSection(activeSection.id, -1)
+                          : null
+                      }
                       onMoveDown={
-                        idx < sections.length - 1
-                          ? () => moveSection(sec.id, 1)
+                        activeIndex < sections.length - 1
+                          ? () => moveSection(activeSection.id, 1)
                           : null
                       }
                     />
                   ) : (
                     <Illustration
-                      key={sec.id}
-                      index={idx}
-                      caption={sec.caption}
+                      key={activeSection.id}
+                      index={activeIndex}
+                      caption={activeSection.caption}
                       imageUrl={
-                        sec.imageId ? allImages[sec.imageId] ?? null : null
+                        activeSection.imageId
+                          ? allImages[activeSection.imageId] ?? null
+                          : null
                       }
-                      generating={!!generatingSections[sec.id]}
-                      planning={!!planningSections[sec.id]}
+                      generating={!!generatingSections[activeSection.id]}
+                      planning={!!planningSections[activeSection.id]}
                       onCaptionChange={(val) =>
-                        updateSectionField(sec.id, "caption", val)
+                        updateSectionField(activeSection.id, "caption", val)
                       }
                       onGenerateIllustration={(textModel, imageModel) =>
-                        handleGenerateIllustration(sec.id, textModel, imageModel)
+                        handleGenerateIllustration(
+                          activeSection.id,
+                          textModel,
+                          imageModel
+                        )
                       }
                       onPlanIllustration={(textModel) =>
-                        handlePlanIllustration(sec.id, textModel)
+                        handlePlanIllustration(activeSection.id, textModel)
                       }
-                      onRemove={() => handleRemoveSection(sec.id)}
-                      onMoveUp={idx > 0 ? () => moveSection(sec.id, -1) : null}
+                      onRemove={() => handleRemoveSection(activeSection.id)}
+                      onMoveUp={
+                        activeIndex > 0
+                          ? () => moveSection(activeSection.id, -1)
+                          : null
+                      }
                       onMoveDown={
-                        idx < sections.length - 1
-                          ? () => moveSection(sec.id, 1)
+                        activeIndex < sections.length - 1
+                          ? () => moveSection(activeSection.id, 1)
                           : null
                       }
                     />
-                  )
-                )}
-
-                <div className="add-section-row">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => addSection("markdown")}
-                  >
-                    📝 Add Text
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => addSection("illustration")}
-                  >
-                    🖼️ Add Illustration
-                  </button>
+                  )}
                 </div>
-              </section>
+              )}
 
               {/* Export */}
               <ExportButtons story={story} />
