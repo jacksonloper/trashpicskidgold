@@ -1,6 +1,4 @@
-import { memo } from "react";
-
-function StyleEditor({ style, onStyleChange }) {
+export default function StyleEditor({ style, onStyleChange }) {
   return (
     <section className="card">
       <h2>🎨 Illustration Style</h2>
@@ -18,5 +16,3 @@ function StyleEditor({ style, onStyleChange }) {
     </section>
   );
 }
-
-export default memo(StyleEditor);

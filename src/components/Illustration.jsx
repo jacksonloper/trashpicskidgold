@@ -1,15 +1,7 @@
-import { memo, useState } from "react";
+import { useState } from "react";
 import { TEXT_MODELS, IMAGE_MODELS } from "../gemini";
 
-/**
- * One illustrated page.
- *
- * Memoized, and every callback takes the section id rather than being bound to
- * it by the parent — a 70-page story renders 70 of these, and without this
- * each keystroke anywhere re-renders every one of them.
- */
-function Illustration({
-  id,
+export default function Illustration({
   index,
   caption,
   imageUrl,
@@ -19,8 +11,6 @@ function Illustration({
   onGenerateIllustration,
   onPlanIllustration,
   onRemove,
-  canMoveUp,
-  canMoveDown,
   onMoveUp,
   onMoveDown,
 }) {
@@ -36,8 +26,8 @@ function Illustration({
           <button
             type="button"
             className="btn-move"
-            onClick={() => onMoveUp(id)}
-            disabled={!canMoveUp}
+            onClick={onMoveUp}
+            disabled={!onMoveUp}
             title="Move up"
           >
             ▲
@@ -45,8 +35,8 @@ function Illustration({
           <button
             type="button"
             className="btn-move"
-            onClick={() => onMoveDown(id)}
-            disabled={!canMoveDown}
+            onClick={onMoveDown}
+            disabled={!onMoveDown}
             title="Move down"
           >
             ▼
@@ -54,7 +44,7 @@ function Illustration({
           <button
             type="button"
             className="btn-remove"
-            onClick={() => onRemove(id)}
+            onClick={onRemove}
             title="Remove illustration"
           >
             ✕
@@ -67,7 +57,7 @@ function Illustration({
         className="caption-input"
         placeholder="Describe this scene (e.g. Pugtato and Cabpig have a tea party in a garden)"
         value={caption}
-        onChange={(e) => onCaptionChange(id, e.target.value)}
+        onChange={(e) => onCaptionChange(e.target.value)}
       />
 
       <div className="model-select-row">
@@ -105,7 +95,7 @@ function Illustration({
           type="button"
           className="btn-primary"
           disabled={!canGenerate}
-          onClick={() => onGenerateIllustration(id, textModel, imageModel)}
+          onClick={() => onGenerateIllustration(textModel, imageModel)}
         >
           {planning
             ? "Planning…"
@@ -117,7 +107,7 @@ function Illustration({
           type="button"
           className="btn-secondary"
           disabled={!canGenerate}
-          onClick={() => onPlanIllustration(id, textModel)}
+          onClick={() => onPlanIllustration(textModel)}
           title="Plan the prompt first, then review and edit it before generating"
         >
           📝 Generate Text &amp; Preview
@@ -132,5 +122,3 @@ function Illustration({
     </div>
   );
 }
-
-export default memo(Illustration);
