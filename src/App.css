@@ -842,3 +842,8 @@
   outline: 2px solid #4285f4;
   outline-offset: -2px;
 }
+
+.plan-modal-target {
+  color: #777;
+  font-weight: 500;
+}

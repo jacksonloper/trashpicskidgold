@@ -1088,6 +1088,20 @@ export default function App() {
 
   const handleCancelPlan = useCallback(() => setIllustrationPlan(null), []);
 
+  /**
+   * Which page an open plan belongs to.
+   *
+   * Planning takes seconds, and with one section on screen at a time the
+   * modal can easily open over a different page than the one it is for.
+   */
+  const planSectionLabel = useMemo(() => {
+    if (!illustrationPlan) return null;
+    const idx = sections.findIndex(
+      (sec) => sec.id === illustrationPlan.sectionId
+    );
+    return idx === -1 ? null : sectionTitle(sections[idx], idx);
+  }, [illustrationPlan, sections]);
+
   /* ---- render ---- */
 
   if (!ready) return null; // waiting for DB
@@ -1307,6 +1321,7 @@ export default function App() {
       {illustrationPlan && (
         <IllustrationPlanModal
           plan={illustrationPlan}
+          sectionLabel={planSectionLabel}
           notice={illustrationPlan.notice}
           allImages={allImages}
           referenceGraphics={referenceGraphics}
