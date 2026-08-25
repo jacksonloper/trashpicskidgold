@@ -28,9 +28,17 @@ export default function SectionIndex({
   const activeRef = useRef(null);
 
   // Keep the selected row visible when the selection moves by Previous/Next
-  // rather than by a click on the list itself.
+  // or by the keyboard rather than by a click on the list itself.
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: "nearest" });
+    const row = activeRef.current;
+    if (!row) return;
+    row.scrollIntoView({ block: "nearest" });
+    // When the keyboard is what moved the selection, the keyboard should
+    // follow it — otherwise the next arrow press has nothing to act on.
+    const focused = document.activeElement;
+    if (focused !== row && focused?.classList.contains("section-index-row")) {
+      row.focus({ preventScroll: true });
+    }
   }, [activeId]);
 
   return (
@@ -38,7 +46,10 @@ export default function SectionIndex({
       <h2>📚 Story Sections</h2>
       <p className="section-description">
         Your story in order. Pick a page to work on it — one at a time, so a
-        long story stays quick to edit.
+        long story stays quick to edit. <kbd>Alt</kbd>+<kbd>↑</kbd> and{" "}
+        <kbd>Alt</kbd>+<kbd>↓</kbd> move between pages while you type; hold to
+        go faster. In this list the plain arrows, <kbd>j</kbd>/<kbd>k</kbd> and{" "}
+        <kbd>Home</kbd>/<kbd>End</kbd> work too.
       </p>
 
       {sections.length === 0 ? (

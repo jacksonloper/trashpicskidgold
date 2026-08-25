@@ -36,6 +36,7 @@ import {
   migrateStory,
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
+import useSectionShortcuts from "./useSectionShortcuts";
 import {
   readStoryBundle,
   prepareForImport,
@@ -344,15 +345,18 @@ export default function App() {
     const imageId = sec?.type === "illustration" ? sec.imageId : null;
     if (!imageId || allImages[imageId]) return;
     let cancelled = false;
-    (async () => {
+    // Settle first: holding the navigation keys down walks past pages several
+    // times a second, and each one of those is a megabyte off the disk.
+    const timer = setTimeout(async () => {
       const rec = await getImage(imageId);
       if (cancelled || !rec) return;
       setAllImages((prev) =>
         prev[imageId] ? prev : { ...prev, [imageId]: rec.data }
       );
-    })();
+    }, 150);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [activeSectionId, sections, allImages]);
 
@@ -827,15 +831,37 @@ export default function App() {
 
   const handleSelectSection = useCallback((id) => setActiveSectionId(id), []);
 
-  const handlePrevSection = useCallback(() => {
-    if (activeIndex > 0) setActiveSectionId(sections[activeIndex - 1].id);
-  }, [activeIndex, sections]);
+  /** Move the selection: "prev" | "next" | "first" | "last". */
+  const navigateSections = useCallback(
+    (direction) => {
+      if (sections.length === 0) return;
+      const target =
+        direction === "first"
+          ? 0
+          : direction === "last"
+            ? sections.length - 1
+            : activeIndex + (direction === "next" ? 1 : -1);
+      if (target < 0 || target >= sections.length) return;
+      setActiveSectionId(sections[target].id);
+    },
+    [activeIndex, sections]
+  );
 
-  const handleNextSection = useCallback(() => {
-    if (activeIndex > -1 && activeIndex < sections.length - 1) {
-      setActiveSectionId(sections[activeIndex + 1].id);
-    }
-  }, [activeIndex, sections]);
+  const handlePrevSection = useCallback(
+    () => navigateSections("prev"),
+    [navigateSections]
+  );
+  const handleNextSection = useCallback(
+    () => navigateSections("next"),
+    [navigateSections]
+  );
+
+  // Off while a dialog owns the keyboard, so Escape-and-arrow habits inside
+  // the plan or confirm dialogs don't move the story underneath them.
+  useSectionShortcuts(
+    !!story && !illustrationPlan && !confirm && sections.length > 1,
+    navigateSections
+  );
 
   /* ---- confirm / undo dispatch ---- */
 
@@ -1163,6 +1189,8 @@ export default function App() {
                       className="btn-small"
                       onClick={handlePrevSection}
                       disabled={activeIndex <= 0}
+                      title="Previous section (Alt+↑, hold to go faster)"
+                      aria-keyshortcuts="Alt+ArrowUp"
                     >
                       ← Previous
                     </button>
@@ -1174,6 +1202,8 @@ export default function App() {
                       className="btn-small"
                       onClick={handleNextSection}
                       disabled={activeIndex >= sections.length - 1}
+                      title="Next section (Alt+↓, hold to go faster)"
+                      aria-keyshortcuts="Alt+ArrowDown"
                     >
                       Next →
                     </button>
