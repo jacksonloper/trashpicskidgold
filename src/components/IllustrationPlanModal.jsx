@@ -8,6 +8,8 @@ import { IMAGE_MODELS } from "../gemini";
  *
  * Props:
  *   plan          – { prompt, referenceImageIds }
+ *   sectionLabel  – which page the plan is for; the plan can arrive after the
+ *                   user has moved on to a different section
  *   notice        – optional warning to show above the prompt (damaged reply,
  *                   failed generation) so the user knows why they are here
  *   allImages     – { imageId: dataUrl } map of all loaded images
@@ -20,6 +22,7 @@ export default function IllustrationPlanModal({
   plan,
   notice,
   allImages,
+  sectionLabel,
   referenceGraphics,
   sections,
   onApprove,
@@ -73,7 +76,12 @@ export default function IllustrationPlanModal({
   return (
     <div className="plan-modal-overlay" onClick={onCancel}>
       <div className="plan-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Review Illustration Plan</h3>
+        <h3>
+          Review Illustration Plan
+          {sectionLabel && (
+            <span className="plan-modal-target"> — {sectionLabel}</span>
+          )}
+        </h3>
 
         {notice && (
           <p className="plan-notice" role="alert">
