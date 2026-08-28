@@ -37,6 +37,7 @@ import {
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
 import useSectionShortcuts from "./useSectionShortcuts";
+import scrollIntoViewFully from "./scrollIntoViewFully";
 import {
   readStoryBundle,
   prepareForImport,
@@ -165,9 +166,13 @@ export default function App() {
   const [confirm, setConfirm] = useState(null); // pending destructive action
   const [undo, setUndo] = useState(null); // last reversible deletion
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
+  const [revealRequest, setRevealRequest] = useState(null); // { id } to show
 
   const dirtyStoryRef = useRef(null);
   const saveTimerRef = useRef(null);
+  const navbarHeightRef = useRef(0); // how much of the top the sticky bar covers
+  const editorRef = useRef(null); // the one open section, on screen
+  const revealedRef = useRef(null); // section the last page turn aimed at
 
   /* ---- helpers ---- */
 
@@ -714,6 +719,88 @@ export default function App() {
     [story, updateStory]
   );
 
+  /* ---- keeping the open section in view ---- */
+
+  /*
+   * Turning a page should land on the page, not somewhere above it.
+   *
+   * Only the open section is mounted, so a page turn doesn't scroll anything by
+   * itself: the new page is drawn wherever the old one was, which is off screen
+   * as soon as the story cards above it are taller than the window.
+   * `revealActiveSection` below is the correction — and since the point of a
+   * page is its picture, it aims at the illustration when the whole card is
+   * too tall to fit in the window.
+   */
+
+  /*
+   * Measure the sticky navbar.
+   *
+   * That band is on screen but not visible, so nothing should be scrolled
+   * underneath it — and the sidebar has to start below it. A ref callback
+   * rather than an effect because the navbar isn't mounted for the whole life
+   * of the app: the age gate stands in front of it, and it wraps to two rows
+   * on a narrow window.
+   */
+  const measureNavbar = useCallback((nav) => {
+    if (!nav) return undefined;
+    const measure = () => {
+      navbarHeightRef.current = nav.offsetHeight;
+      document.documentElement.style.setProperty(
+        "--navbar-height",
+        `${nav.offsetHeight}px`
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, []);
+
+  /** Scroll the open section — or at least its picture — fully into view. */
+  const revealActiveSection = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const topInset = navbarHeightRef.current;
+    const room = window.innerHeight - topInset;
+    const image = editor.querySelector(".image-preview img");
+    // The whole card when it fits; otherwise the illustration, which is the
+    // part that is worth having all of.
+    const fits = editor.getBoundingClientRect().height <= room;
+    scrollIntoViewFully(fits || !image ? editor : image, { topInset });
+  }, []);
+
+  /**
+   * Ask for the open section to be shown after this render.
+   *
+   * A fresh object every time, so asking twice for the same section — clicking
+   * the row you are already on — still counts as asking.
+   */
+  const requestReveal = useCallback((id) => setRevealRequest({ id }), []);
+
+  // Deliberate page turns only: switching stories or loading one shouldn't
+  // yank the view down past the title and style cards.
+  useEffect(() => {
+    if (!revealRequest) return;
+    revealedRef.current = revealRequest.id;
+    revealActiveSection();
+  }, [revealRequest, revealActiveSection]);
+
+  /**
+   * A picture finished decoding.
+   *
+   * Until then it had no height, so a page turn that aimed at this section
+   * aimed at a card that has since grown. Aim again — but only for a section
+   * the user actually turned to, so an image arriving on its own doesn't move
+   * the page underneath them.
+   */
+  const handleImageShown = useCallback(
+    (sectionId) => {
+      if (revealedRef.current !== sectionId) return;
+      revealActiveSection();
+    },
+    [revealActiveSection]
+  );
+
   /* ---- sections ---- */
 
   const addSection = useCallback(
@@ -728,8 +815,9 @@ export default function App() {
         jsonblob: { ...s.jsonblob, sections: [...s.jsonblob.sections, sec] },
       }));
       setActiveSectionId(id);
+      requestReveal(id);
     },
-    [updateStory]
+    [requestReveal, updateStory]
   );
 
   const addMarkdownSection = useCallback(
@@ -829,7 +917,13 @@ export default function App() {
 
   /* ---- section navigation ---- */
 
-  const handleSelectSection = useCallback((id) => setActiveSectionId(id), []);
+  const handleSelectSection = useCallback(
+    (id) => {
+      setActiveSectionId(id);
+      requestReveal(id);
+    },
+    [requestReveal]
+  );
 
   /** Move the selection: "prev" | "next" | "first" | "last". */
   const navigateSections = useCallback(
@@ -843,8 +937,9 @@ export default function App() {
             : activeIndex + (direction === "next" ? 1 : -1);
       if (target < 0 || target >= sections.length) return;
       setActiveSectionId(sections[target].id);
+      requestReveal(sections[target].id);
     },
-    [activeIndex, sections]
+    [activeIndex, requestReveal, sections]
   );
 
   const handlePrevSection = useCallback(
@@ -916,8 +1011,11 @@ export default function App() {
       return { ...s, jsonblob: { ...s.jsonblob, [key]: next } };
     });
 
-    if (pending.kind === "section") setActiveSectionId(item.id);
-  }, [flushSave, undo, updateStory]);
+    if (pending.kind === "section") {
+      setActiveSectionId(item.id);
+      requestReveal(item.id);
+    }
+  }, [flushSave, requestReveal, undo, updateStory]);
 
   /* ---- illustration plan → generate ---- */
 
@@ -1113,6 +1211,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Navbar
+        ref={measureNavbar}
         stories={storyList}
         activeStoryId={activeStoryId}
         onSelectStory={handleSelectStory}
@@ -1125,6 +1224,23 @@ export default function App() {
       />
 
       <div className="app">
+        {/* The story index: a left-hand sidebar on a wide screen, and the
+            first thing under the navbar on a narrow one. It leads <main> in
+            the markup either way, so Tab reaches it in one stop. */}
+        {story && (
+          <aside className="story-nav" aria-label="Story sections">
+            <SectionIndex
+              sections={sections}
+              activeId={activeSection?.id ?? null}
+              generatingSections={generatingSections}
+              planningSections={planningSections}
+              onSelect={handleSelectSection}
+              onAddMarkdown={addMarkdownSection}
+              onAddIllustration={addIllustrationSection}
+            />
+          </aside>
+        )}
+
         <main>
           <ApiKeyInput
             apiKey={apiKey}
@@ -1183,20 +1299,9 @@ export default function App() {
                 disabled={!apiKey.trim()}
               />
 
-              {/* The story in order — pick a section to open it below */}
-              <SectionIndex
-                sections={sections}
-                activeId={activeSection?.id ?? null}
-                generatingSections={generatingSections}
-                planningSections={planningSections}
-                onSelect={handleSelectSection}
-                onAddMarkdown={addMarkdownSection}
-                onAddIllustration={addIllustrationSection}
-              />
-
-              {/* The one open section */}
+              {/* The one open section, the one the index points at */}
               {activeSection && (
-                <div className="section-editor">
+                <div className="section-editor" ref={editorRef}>
                   <div className="section-pager">
                     <button
                       type="button"
@@ -1268,6 +1373,7 @@ export default function App() {
                       onPlanIllustration={(textModel) =>
                         handlePlanIllustration(activeSection.id, textModel)
                       }
+                      onImageShown={() => handleImageShown(activeSection.id)}
                       onRemove={() => handleRemoveSection(activeSection.id)}
                       onMoveUp={
                         activeIndex > 0

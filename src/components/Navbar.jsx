@@ -1,4 +1,5 @@
 export default function Navbar({
+  ref,
   stories,
   activeStoryId,
   onSelectStory,
@@ -17,7 +18,9 @@ export default function Navbar({
   };
 
   return (
-    <nav className="navbar">
+    // The ref is how App measures the sticky bar: everything that scrolls
+    // something into view has to know how much of the top it covers.
+    <nav className="navbar" ref={ref}>
       <span className="navbar-brand">📖 Story Maker</span>
 
       <div className="navbar-stories">
