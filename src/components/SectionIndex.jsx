@@ -15,6 +15,11 @@ function preview(sec) {
  * This is what you get instead of scrolling through every page: the sequence
  * stays visible and cheap to render, while only the selected section is
  * actually mounted as an editor.
+ *
+ * The list is a single stop for Tab — only the selected row is tabbable, and
+ * the arrow keys move from there (the roving-tabindex pattern). So reaching
+ * the list costs one Tab rather than one per page, and once you are in it
+ * plain ↑/↓ walk the story.
  */
 export default function SectionIndex({
   sections,
@@ -42,14 +47,14 @@ export default function SectionIndex({
   }, [activeId]);
 
   return (
-    <section className="card">
+    <section className="card section-index">
       <h2>📚 Story Sections</h2>
       <p className="section-description">
-        Your story in order. Pick a page to work on it — one at a time, so a
-        long story stays quick to edit. <kbd>Alt</kbd>+<kbd>↑</kbd> and{" "}
-        <kbd>Alt</kbd>+<kbd>↓</kbd> move between pages while you type; hold to
-        go faster. In this list the plain arrows, <kbd>j</kbd>/<kbd>k</kbd> and{" "}
-        <kbd>Home</kbd>/<kbd>End</kbd> work too.
+        Your story in order — pick a page to work on it. <kbd>Tab</kbd> into the
+        list, then plain <kbd>↑</kbd>/<kbd>↓</kbd> (or <kbd>j</kbd>/
+        <kbd>k</kbd>, <kbd>Home</kbd>/<kbd>End</kbd>) turn pages.{" "}
+        <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> does the same while you are
+        typing; hold either to go faster.
       </p>
 
       {sections.length === 0 ? (
@@ -74,6 +79,9 @@ export default function SectionIndex({
                     "section-index-row" + (isActive ? " is-active" : "")
                   }
                   aria-current={isActive ? "true" : undefined}
+                  // Roving tabindex: Tab reaches the list once, at the row you
+                  // are on, and the arrows take over from there.
+                  tabIndex={isActive ? 0 : -1}
                   onClick={() => onSelect(sec.id)}
                 >
                   <span className="section-index-num">{idx + 1}</span>

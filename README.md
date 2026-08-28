@@ -7,6 +7,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **BYOK (Bring Your Own Key)** — paste your Gemini API key; nothing is stored on a server
 - **Character Sheet** — define up to 4 characters with names and descriptions, then generate a character model sheet
 - **Story Pages** — add illustrated pages with captions; each illustration uses the character sheet as a visual reference for consistency
+- **Keyboard-first navigation** — the story index sits down the left on a wide screen; one `Tab` reaches it, then `↑`/`↓` turn pages and land with the illustration fully in view (`Alt`+`↑`/`↓` while you type; hold either to go faster)
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
 - **Netlify-ready** — deploys with `netlify.toml` included
 

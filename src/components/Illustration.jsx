@@ -13,6 +13,7 @@ export default function Illustration({
   onRemove,
   onMoveUp,
   onMoveDown,
+  onImageShown,
 }) {
   const [textModel, setTextModel] = useState(TEXT_MODELS[0].id);
   const [imageModel, setImageModel] = useState(IMAGE_MODELS[0].id);
@@ -116,7 +117,13 @@ export default function Illustration({
 
       {imageUrl && (
         <div className="image-preview">
-          <img src={imageUrl} alt={caption || "Story illustration"} />
+          {/* Until it decodes the picture has no height, so whoever scrolled
+              it into view has to aim again once it does. */}
+          <img
+            src={imageUrl}
+            alt={caption || "Story illustration"}
+            onLoad={onImageShown}
+          />
         </div>
       )}
     </div>

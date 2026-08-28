@@ -56,6 +56,58 @@
   padding: 1rem;
 }
 
+/*
+ * Wide screens put the story index down the left, alongside the page you are
+ * editing instead of above it. Below this width — phones, and portrait
+ * tablets — it stays a card in the single column, where it already worked.
+ *
+ * --navbar-height is measured in App: the sidebar has to start below the
+ * sticky navbar, and end at the bottom of the window.
+ */
+@media (min-width: 62rem) {
+  .app {
+    display: grid;
+    grid-template-columns: 19rem minmax(0, 800px);
+    justify-content: center;
+    gap: 1.5rem;
+    align-items: start;
+    max-width: 1180px;
+  }
+
+  /* Before there is a story there is no index, and the one column left has
+     the whole width to itself. */
+  .app > main:only-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+    max-width: 800px;
+    width: 100%;
+  }
+
+  .story-nav {
+    position: sticky;
+    top: calc(var(--navbar-height, 3.5rem) + 1rem);
+    display: flex;
+    max-height: calc(100vh - var(--navbar-height, 3.5rem) - 2rem);
+  }
+
+  /* The card fills the sidebar, and the list — not the card — is what
+     scrolls, so the heading and the Add buttons stay put. */
+  .story-nav .section-index {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    margin-bottom: 0;
+    padding: 1rem;
+  }
+
+  .story-nav .section-index-list {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
 /* ---- Cards ---- */
 
 .card {
@@ -841,6 +893,13 @@
 .section-index-row:focus-visible {
   outline: 2px solid #4285f4;
   outline-offset: -2px;
+}
+
+/* The list is one Tab stop, so it is worth showing when the keyboard is in
+   it: that is when the plain arrow keys turn pages. */
+.section-index-list:focus-within {
+  border-color: #4285f4;
+  box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.15);
 }
 
 .plan-modal-target {
