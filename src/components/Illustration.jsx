@@ -1,5 +1,6 @@
 import { useState } from "react";
 import GrowingTextarea from "./GrowingTextarea";
+import SectionHeader from "./SectionHeader";
 import { TEXT_MODELS, IMAGE_MODELS } from "../gemini";
 
 /*
@@ -34,37 +35,13 @@ export default function Illustration({
 
   return (
     <div className="card illustration-card">
-      <div className="illustration-header">
-        <h3>Page {index + 1}</h3>
-        <div className="section-header-actions">
-          <button
-            type="button"
-            className="btn-move"
-            onClick={onMoveUp}
-            disabled={!onMoveUp}
-            title="Move up"
-          >
-            ▲
-          </button>
-          <button
-            type="button"
-            className="btn-move"
-            onClick={onMoveDown}
-            disabled={!onMoveDown}
-            title="Move down"
-          >
-            ▼
-          </button>
-          <button
-            type="button"
-            className="btn-remove"
-            onClick={onRemove}
-            title="Remove illustration"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
+      <SectionHeader
+        title={`Page ${index + 1}`}
+        noun="page"
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+        onRemove={onRemove}
+      />
 
       <GrowingTextarea
         className="caption-input caption-text"

@@ -219,13 +219,15 @@
   border: 1px dashed #ccc;
 }
 
-.illustration-header {
+.section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.illustration-header h3 {
+.section-header h3 {
   margin: 0;
 }
 
@@ -357,15 +359,18 @@
   gap: 0.25rem;
 }
 
+/* Labelled, because an arrow alone here reads as "go up" — which is what the
+   index and the pager do — rather than "take this page up the story". */
 .btn-move {
   background: none;
   border: 1px solid #ccc;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: #666;
   cursor: pointer;
-  padding: 0.15rem 0.4rem;
-  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .btn-move:hover:not(:disabled) {

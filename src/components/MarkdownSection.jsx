@@ -1,3 +1,5 @@
+import SectionHeader from "./SectionHeader";
+
 export default function MarkdownSection({
   index,
   content,
@@ -8,37 +10,13 @@ export default function MarkdownSection({
 }) {
   return (
     <div className="card markdown-card">
-      <div className="illustration-header">
-        <h3>📝 Text Block {index + 1}</h3>
-        <div className="section-header-actions">
-          <button
-            type="button"
-            className="btn-move"
-            onClick={onMoveUp}
-            disabled={!onMoveUp}
-            title="Move up"
-          >
-            ▲
-          </button>
-          <button
-            type="button"
-            className="btn-move"
-            onClick={onMoveDown}
-            disabled={!onMoveDown}
-            title="Move down"
-          >
-            ▼
-          </button>
-          <button
-            type="button"
-            className="btn-remove"
-            onClick={onRemove}
-            title="Remove text block"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
+      <SectionHeader
+        title={`📝 Text Block ${index + 1}`}
+        noun="text block"
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+        onRemove={onRemove}
+      />
 
       <textarea
         className="markdown-input"
