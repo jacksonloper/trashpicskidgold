@@ -239,6 +239,23 @@
   box-sizing: border-box;
 }
 
+/* A text box sized by its own text — see GrowingTextarea. Its height is set
+   from the content, so the drag handle would only fight it; a max-height on
+   top of this is what decides when it stops growing and starts scrolling. */
+.growing-textarea {
+  display: block;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: none;
+  overflow-y: auto;
+}
+
+/* Roughly six lines: enough for a wordy caption, not so much that it pushes
+   the illustration off the screen. */
+.caption-text {
+  max-height: 11rem;
+}
+
 /* ---- Markdown sections ---- */
 
 .markdown-card {
