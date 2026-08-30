@@ -25,6 +25,42 @@ function isTypingTarget(el) {
 }
 
 /**
+ * The key that hands the keyboard to the section list.
+ *
+ * Backslash is unshifted, nowhere near the arrows, and means nothing else in
+ * the app — so it is free to be the one stop between wherever you are and the
+ * list, the way Tab used to be. It stays out of the way while you are typing,
+ * where a backslash is just a backslash.
+ */
+function isFocusListKey(event) {
+  return (
+    event.key === "\\" &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !event.shiftKey &&
+    !isTypingTarget(event.target)
+  );
+}
+
+/**
+ * Put the keyboard on the selected row, so ↑/↓ turn pages from here.
+ *
+ * The row is found in the DOM rather than through a ref because the list owns
+ * its own focus management; this only has to point at the row it already
+ * marks as current.
+ */
+function focusSectionList() {
+  const row =
+    document.querySelector(".section-index-row.is-active") ??
+    document.querySelector(".section-index-row");
+  if (!row) return false;
+  row.focus();
+  row.scrollIntoView({ block: "nearest" });
+  return true;
+}
+
+/**
  * Which way a key event moves, or null when it isn't ours.
  *
  * Alt+↑/↓ works anywhere, including mid-caption, so you never have to leave
@@ -107,6 +143,13 @@ export default function useSectionShortcuts(enabled, onNavigate) {
     const handleKeyDown = (event) => {
       const listHasFocus =
         document.activeElement?.classList.contains("section-index-row");
+
+      if (isFocusListKey(event)) {
+        // Only swallow the key if there was a list to jump to.
+        if (focusSectionList()) event.preventDefault();
+        return;
+      }
+
       const direction = directionFor(event, listHasFocus);
       if (!direction) return;
 
