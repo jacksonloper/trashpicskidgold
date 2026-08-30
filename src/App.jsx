@@ -954,7 +954,7 @@ export default function App() {
   // Off while a dialog owns the keyboard, so Escape-and-arrow habits inside
   // the plan or confirm dialogs don't move the story underneath them.
   useSectionShortcuts(
-    !!story && !illustrationPlan && !confirm && sections.length > 1,
+    !!story && !illustrationPlan && !confirm && sections.length > 0,
     navigateSections
   );
 

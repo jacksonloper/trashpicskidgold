@@ -19,7 +19,8 @@ function preview(sec) {
  * The list is a single stop for Tab — only the selected row is tabbable, and
  * the arrow keys move from there (the roving-tabindex pattern). So reaching
  * the list costs one Tab rather than one per page, and once you are in it
- * plain ↑/↓ walk the story.
+ * plain ↑/↓ walk the story. Backslash goes straight there from anywhere
+ * outside a text box (see useSectionShortcuts).
  */
 export default function SectionIndex({
   sections,
@@ -50,11 +51,11 @@ export default function SectionIndex({
     <section className="card section-index">
       <h2>📚 Story Sections</h2>
       <p className="section-description">
-        Your story in order — pick a page to work on it. <kbd>Tab</kbd> into the
-        list, then plain <kbd>↑</kbd>/<kbd>↓</kbd> (or <kbd>j</kbd>/
-        <kbd>k</kbd>, <kbd>Home</kbd>/<kbd>End</kbd>) turn pages.{" "}
-        <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> does the same while you are
-        typing; hold either to go faster.
+        Your story in order — pick a page to work on it. <kbd>{"\\"}</kbd> (or{" "}
+        <kbd>Tab</kbd>) jumps to the list, then plain <kbd>↑</kbd>/<kbd>↓</kbd>{" "}
+        (or <kbd>j</kbd>/<kbd>k</kbd>, <kbd>Home</kbd>/<kbd>End</kbd>) turn
+        pages. <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> does the same while you
+        are typing; hold either to go faster.
       </p>
 
       {sections.length === 0 ? (
@@ -82,6 +83,7 @@ export default function SectionIndex({
                   // Roving tabindex: Tab reaches the list once, at the row you
                   // are on, and the arrows take over from there.
                   tabIndex={isActive ? 0 : -1}
+                  aria-keyshortcuts={isActive ? "\\" : undefined}
                   onClick={() => onSelect(sec.id)}
                 >
                   <span className="section-index-num">{idx + 1}</span>
