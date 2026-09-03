@@ -8,7 +8,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Character Sheet** — define up to 4 characters with names and descriptions, then generate a character model sheet
 - **Story Pages** — add illustrated pages with captions; each illustration uses the character sheet as a visual reference for consistency
 - **Keyboard-first navigation** — the story index sits down the left on a wide screen; `\` (or one `Tab`) reaches it, then `↑`/`↓` turn pages and land with the illustration fully in view (`Alt`+`↑`/`↓` while you type; hold either to go faster)
-- **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself
+- **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
 - **Netlify-ready** — deploys with `netlify.toml` included
 
@@ -30,23 +30,33 @@ illustration with no dialog and no toast.
 
 **🗑️ Trash** in the navbar opens the bin, with a count of what is waiting in it.
 Each picture shows its caption, which story it came from, why it was thrown
-away, and how big it is. From there you can:
+away, and how big it is. From there you can **Save** one to your computer, or
+destroy it — **Delete forever** and **Empty trash** are the only two things in
+the app that actually get rid of a picture, and both ask first. Emptying wants
+you to type `empty`.
 
-- **Put back** — the picture returns to its story as a new page (or as a
-  reference graphic, if that is what it was), caption and all. Disabled when
-  the story itself is gone, since there is nowhere to put it.
-- **Save** — download the file, which is the only way to keep a picture whose
-  story no longer exists.
-- **Delete forever** / **Empty trash** — the only two things in the app that
-  actually destroy a picture, and both ask first. Emptying wants you to type
-  `empty`.
+Getting a picture back happens on the page that wants it, not in the bin. Under
+the two generate buttons every illustration page carries a pair of small,
+deliberately quiet ones:
+
+- **📁 Upload illustration** — put a picture from your own computer on this
+  page. No API call, no waiting.
+- **🗑️ Take illustration from trash** — opens the same bin as a picker, showing
+  how many pictures are in it, and drops the one you choose onto this page.
+  Greyed out while the trash is empty.
+
+Either one is a straight swap: whatever was on the page takes the incoming
+picture's place in the trash, so nothing is lost by changing your mind. A
+picture can land on a page in a different story than the one it came from —
+it is re-stamped as that story's on the way out, so deleting its old story
+later leaves it alone.
 
 Nothing here expires: the trash survives reloads and sits there until you clear
 it. The undo toast still works exactly as before — undoing a removal quietly
 takes the picture back out of the trash — and emptying the trash closes any undo
 offer still on screen, since there would be nothing left to put back.
 
-The trash is not part of an exported ZIP. Put a picture back into its story
+The trash is not part of an exported ZIP. Take a picture back onto a page
 first if you want it in the bundle.
 
 ## Story bundles

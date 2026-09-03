@@ -59,58 +59,6 @@ function sectionTitle(sec, index) {
     : `Text Block ${index + 1}`;
 }
 
-/**
- * Give a picture from the trash a home in the story it came from.
- *
- * Whatever held it — a page, a reference graphic — is long gone by the time
- * anyone opens the trash, so putting the picture back means making it a new
- * one: a reference graphic for a picture that was a reference, a page at the
- * end of the story for everything else. The caption comes back with it, so a
- * restored page is still the page it was.
- *
- * Returns { story, sectionId } — `sectionId` is the page to turn to, or null
- * when the picture went back as a reference graphic.
- */
-function attachPictureToStory(story, entry) {
-  const blob = story.jsonblob ?? {};
-
-  if (entry.origin === "reference") {
-    return {
-      story: {
-        ...story,
-        jsonblob: {
-          ...blob,
-          referenceGraphics: [
-            ...(blob.referenceGraphics ?? []),
-            {
-              id: crypto.randomUUID(),
-              label: entry.caption || "Restored reference",
-              kind: "other",
-              imageId: entry.id,
-              prompt: "",
-            },
-          ],
-        },
-      },
-      sectionId: null,
-    };
-  }
-
-  const section = {
-    id: newSectionId(),
-    type: "illustration",
-    caption: entry.caption ?? "",
-    imageId: entry.id,
-  };
-  return {
-    story: {
-      ...story,
-      jsonblob: { ...blob, sections: [...(blob.sections ?? []), section] },
-    },
-    sectionId: section.id,
-  };
-}
-
 /** Warning shown above a plan the model didn't deliver cleanly. */
 function planNotice(plan) {
   return plan.partial
@@ -281,6 +229,7 @@ export default function App() {
   const [trashLoading, setTrashLoading] = useState(false);
   const [trashCount, setTrashCount] = useState(0); // badge on the navbar
   const [trashBusyId, setTrashBusyId] = useState(null); // one item mid-action
+  const [trashPickSectionId, setTrashPickSectionId] = useState(null); // picker
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
   const [revealRequest, setRevealRequest] = useState(null); // { id } to show
 
@@ -298,9 +247,6 @@ export default function App() {
     () => story?.jsonblob?.referenceGraphics ?? [],
     [story]
   );
-  // Which stories still exist — a trashed picture whose story was deleted has
-  // nowhere to be put back to.
-  const storyIds = useMemo(() => storyList.map((s) => s.id), [storyList]);
 
   /**
    * The section being edited.
@@ -539,12 +485,27 @@ export default function App() {
     }
   }, []);
 
+  /** The navbar bin: everything in the trash, with the ways to clear it. */
   const handleOpenTrash = useCallback(() => {
+    setTrashPickSectionId(null);
     setTrashOpen(true);
     loadTrash();
   }, [loadTrash]);
 
-  const handleCloseTrash = useCallback(() => setTrashOpen(false), []);
+  /** The same window as a picker, opened by a page wanting a picture. */
+  const handleTakeFromTrash = useCallback(
+    (sectionId) => {
+      setTrashPickSectionId(sectionId);
+      setTrashOpen(true);
+      loadTrash();
+    },
+    [loadTrash]
+  );
+
+  const handleCloseTrash = useCallback(() => {
+    setTrashOpen(false);
+    setTrashPickSectionId(null);
+  }, []);
 
   /* ---- story CRUD ---- */
 
@@ -1089,6 +1050,35 @@ export default function App() {
     [updateStory]
   );
 
+  /**
+   * Put a picture from the user's own computer on a page.
+   *
+   * Same swap as generating one, minus the API call — a scan, a photo, a
+   * picture from somewhere else. Whatever the page held goes to the trash.
+   */
+  const handleUploadIllustration = useCallback(
+    async (sectionId, dataUrl) => {
+      const sec = sections.find((x) => x.id === sectionId);
+      if (!sec || !story) return;
+      setError(null);
+      try {
+        const imgId = newImageId();
+        await saveImage({
+          id: imgId,
+          storyId: story.id,
+          caption: sec.caption ?? "",
+          data: dataUrl,
+        });
+        setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
+        updateSectionField(sectionId, "imageId", imgId);
+        await trashPicture(sec.imageId, "replaced", story.title);
+      } catch (err) {
+        setError("Could not put that picture on the page: " + err.message);
+      }
+    },
+    [sections, story, trashPicture, updateSectionField]
+  );
+
   /* ---- section navigation ---- */
 
   const handleSelectSection = useCallback(
@@ -1135,61 +1125,53 @@ export default function App() {
   /* ---- acting on what is in the trash ---- */
 
   /**
-   * Put a trashed picture back into the story it came from.
+   * Put a picture from the trash onto the page that asked for it.
    *
-   * The story may not be the one on screen — the trash spans every story — so
-   * this writes straight to the database when it isn't, and goes through the
-   * in-memory story when it is. Either way the picture leaves the trash only
-   * once it has somewhere to live.
+   * It may have come from another story, so the record is re-stamped on the
+   * way out: the images store is indexed by story, and a picture still
+   * carrying its old story's id would be swept up when that story is deleted.
    */
-  const handleRestoreFromTrash = useCallback(
+  const handleUseTrashedPicture = useCallback(
     async (entry) => {
+      const sectionId = trashPickSectionId;
+      const sec = sections.find((x) => x.id === sectionId);
+      if (!sec || !story) return;
       setTrashBusyId(entry.id);
       setError(null);
       try {
         await flushSave();
-        const isActive = entry.storyId === activeStoryId && !!story;
-        const target = isActive ? story : await getStory(entry.storyId);
-        if (!target) {
-          setError(
-            "That picture's story is gone, so there is nowhere to put it back. " +
-              "It is still in the trash."
-          );
+        const replaced = sec.imageId;
+        const picture = await untrashImage(entry.id, {
+          storyId: story.id,
+          caption: sec.caption || entry.caption || "",
+        });
+        if (!picture) {
+          setError("That picture is no longer in the trash.");
           return;
         }
-
-        const { story: next, sectionId } = attachPictureToStory(target, entry);
-        if (isActive) {
-          updateStory(() => next);
-          if (sectionId) {
-            setActiveSectionId(sectionId);
-            requestReveal(sectionId);
-          }
-        } else {
-          await saveStory(next);
-        }
-
-        // The picture leaves the trash last, once something points at it
-        // again. Failing here leaves it in the trash to try a second time,
-        // which beats an image nothing refers to and nothing can reach.
-        const picture = await untrashImage(entry.id);
-        if (picture && isActive) {
-          setAllImages((prev) => ({ ...prev, [picture.id]: picture.data }));
-        }
+        setAllImages((prev) => ({ ...prev, [picture.id]: picture.data }));
+        updateSectionField(sectionId, "imageId", picture.id);
+        // A straight swap: what was on the page takes the picture's place.
+        await trashPicture(replaced, "replaced", story.title);
+        setTrashOpen(false);
+        setTrashPickSectionId(null);
+        requestReveal(sectionId);
       } catch (err) {
-        setError("Could not put that picture back: " + err.message);
+        setError("Could not take that picture out of the trash: " + err.message);
       } finally {
         setTrashBusyId(null);
         await loadTrash();
       }
     },
     [
-      activeStoryId,
       flushSave,
       loadTrash,
       requestReveal,
+      sections,
       story,
-      updateStory,
+      trashPicture,
+      trashPickSectionId,
+      updateSectionField,
     ]
   );
 
@@ -1507,6 +1489,13 @@ export default function App() {
    * Planning takes seconds, and with one section on screen at a time the
    * modal can easily open over a different page than the one it is for.
    */
+  /** The page the trash picker was opened from, named the way its card is. */
+  const trashPickLabel = useMemo(() => {
+    if (!trashPickSectionId) return null;
+    const idx = sections.findIndex((sec) => sec.id === trashPickSectionId);
+    return idx === -1 ? null : sectionTitle(sections[idx], idx);
+  }, [sections, trashPickSectionId]);
+
   const planSectionLabel = useMemo(() => {
     if (!illustrationPlan) return null;
     const idx = sections.findIndex(
@@ -1690,6 +1679,13 @@ export default function App() {
                       onPlanIllustration={(textModel) =>
                         handlePlanIllustration(activeSection.id, textModel)
                       }
+                      onUploadIllustration={(dataUrl) =>
+                        handleUploadIllustration(activeSection.id, dataUrl)
+                      }
+                      onTakeFromTrash={() =>
+                        handleTakeFromTrash(activeSection.id)
+                      }
+                      trashCount={trashCount}
                       onImageShown={() => handleImageShown(activeSection.id)}
                       onRemove={() => handleRemoveSection(activeSection.id)}
                       onMoveUp={
@@ -1759,10 +1755,10 @@ export default function App() {
         <TrashBin
           items={trashItems}
           loading={trashLoading}
-          liveStoryIds={storyIds}
           busyId={trashBusyId}
           dialogOpen={!!confirm}
-          onRestore={handleRestoreFromTrash}
+          pickLabel={trashPickLabel}
+          onUse={handleUseTrashedPicture}
           onDeleteForever={handleRequestDestroyTrashed}
           onEmpty={handleRequestEmptyTrash}
           onClose={handleCloseTrash}

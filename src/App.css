@@ -929,6 +929,41 @@
   font-weight: 500;
 }
 
+/* Quiet alternatives to generating a picture — an upload, something out of
+   the trash. They sit under the two buttons that are the actual flow, and
+   look like the afterthought they are. */
+.illustration-side-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.btn-tiny {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #777;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: #ddd;
+  text-underline-offset: 3px;
+}
+
+.btn-tiny:hover:not(:disabled) {
+  color: #333;
+  text-decoration-color: #999;
+}
+
+.btn-tiny:disabled {
+  color: #bbb;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
 /* ---- Trash ---- */
 
 /* How many pictures are waiting in the trash, on the button that opens it. */
@@ -1043,7 +1078,16 @@
   cursor: not-allowed;
 }
 
-.trash-note {
-  color: #8a6100;
-  font-size: 0.78rem;
+/* The one thing the picker is for, so it reads as the action rather than as
+   another row button. */
+.btn-use {
+  background: #4285f4;
+  border-color: #4285f4;
+  color: #fff;
 }
+
+.btn-use:hover:not(:disabled) {
+  background: #3367d6;
+  border-color: #3367d6;
+}
+

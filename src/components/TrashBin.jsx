@@ -50,14 +50,18 @@ function downloadName(entry) {
  * Nothing in here is deleted on a timer — that is the whole point — so the
  * window has to make both the keeping and the clearing obvious.
  *
+ * It opens two ways. From the navbar it is the bin itself: what is in there,
+ * how much room it is taking, and what to throw away. From a page it is a
+ * picker — "take illustration from trash" — and then the only thing worth
+ * offering is the picture itself, so the destructive half stays out of the way.
+ *
  * Props:
  *   items       – trash records, newest first
  *   loading     – still reading them out of the database
- *   liveStoryIds – ids of stories that still exist; a picture whose story is
- *                  gone has nowhere to be put back to
- *   busyId      – id of the picture currently being restored or destroyed
+ *   busyId      – id of the picture currently being moved or destroyed
  *   dialogOpen  – a confirm dialog is stacked on top and owns the keyboard
- *   onRestore(entry)
+ *   pickLabel   – the page a picked picture would land on; picker mode when set
+ *   onUse(entry) – required in picker mode
  *   onDeleteForever(entry)
  *   onEmpty()
  *   onClose()
@@ -65,14 +69,15 @@ function downloadName(entry) {
 export default function TrashBin({
   items,
   loading,
-  liveStoryIds,
   busyId,
   dialogOpen,
-  onRestore,
+  pickLabel,
+  onUse,
   onDeleteForever,
   onEmpty,
   onClose,
 }) {
+  const picking = !!pickLabel;
   // Escape closes the trash — unless a confirm dialog is stacked on top, in
   // which case it is that dialog's to cancel, not this window's to close.
   useEffect(() => {
@@ -95,12 +100,23 @@ export default function TrashBin({
         aria-label="Trash"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3>🗑️ Trash</h3>
+        <h3>{picking ? "🗑️ Take a picture from the trash" : "🗑️ Trash"}</h3>
 
         <p className="section-description">
-          Every picture removed from a story lands here and stays — nothing in
-          the trash is thrown away on its own. Put one back, or empty the trash
-          when you are sure.
+          {picking ? (
+            <>
+              Pick a picture to put on <strong>{pickLabel}</strong>. It comes
+              out of the trash and onto the page — and whatever is on that page
+              now takes its place in here.
+            </>
+          ) : (
+            <>
+              Every picture removed from a story lands here and stays — nothing
+              in the trash is thrown away on its own. Put one back on a page
+              from that page's <em>take illustration from trash</em> button, or
+              empty the trash when you are sure.
+            </>
+          )}
         </p>
 
         {loading ? (
@@ -118,18 +134,19 @@ export default function TrashBin({
                 {items.length === 1 ? "picture" : "pictures"}
                 {totalBytes > 0 && <> · {formatBytes(totalBytes)}</>}
               </span>
-              <button
-                type="button"
-                className="btn-danger-solid"
-                onClick={onEmpty}
-              >
-                🧹 Empty trash
-              </button>
+              {!picking && (
+                <button
+                  type="button"
+                  className="btn-danger-solid"
+                  onClick={onEmpty}
+                >
+                  🧹 Empty trash
+                </button>
+              )}
             </div>
 
             <ul className="trash-list">
               {items.map((entry) => {
-                const canRestore = liveStoryIds.includes(entry.storyId);
                 const busy = busyId === entry.id;
                 return (
                   <li key={entry.id} className="trash-item">
@@ -155,19 +172,16 @@ export default function TrashBin({
                       </p>
 
                       <div className="trash-item-actions">
-                        <button
-                          type="button"
-                          className="btn-small"
-                          disabled={!canRestore || busy}
-                          onClick={() => onRestore(entry)}
-                          title={
-                            canRestore
-                              ? "Put this picture back into its story"
-                              : "The story this belonged to is gone, so there is nowhere to put it back"
-                          }
-                        >
-                          ↩️ Put back
-                        </button>
+                        {picking && (
+                          <button
+                            type="button"
+                            className="btn-small btn-use"
+                            disabled={busy || !entry.data}
+                            onClick={() => onUse(entry)}
+                          >
+                            ↩️ Use on this page
+                          </button>
+                        )}
                         {entry.data && (
                           <a
                             className="btn-small"
@@ -178,18 +192,15 @@ export default function TrashBin({
                             ⬇️ Save
                           </a>
                         )}
-                        <button
-                          type="button"
-                          className="btn-small btn-danger"
-                          disabled={busy}
-                          onClick={() => onDeleteForever(entry)}
-                        >
-                          ✕ Delete forever
-                        </button>
-                        {!canRestore && (
-                          <span className="trash-note">
-                            its story is gone — save it if you want to keep it
-                          </span>
+                        {!picking && (
+                          <button
+                            type="button"
+                            className="btn-small btn-danger"
+                            disabled={busy}
+                            onClick={() => onDeleteForever(entry)}
+                          >
+                            ✕ Delete forever
+                          </button>
                         )}
                       </div>
                     </div>
@@ -202,7 +213,7 @@ export default function TrashBin({
 
         <div className="plan-modal-buttons">
           <button type="button" className="btn-secondary" onClick={onClose}>
-            Close
+            {picking ? "Cancel" : "Close"}
           </button>
         </div>
       </div>

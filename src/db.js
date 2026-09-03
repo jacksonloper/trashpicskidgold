@@ -421,10 +421,15 @@ export async function trashImage(imageId, meta) {
 /**
  * Move a picture back out of the trash and into the live image store.
  *
+ * `overrides` is for a picture landing somewhere other than where it came
+ * from: taking one onto a page in a different story has to re-stamp its
+ * `storyId`, or deleting that other story later would take this picture with
+ * it — the images store is indexed by the story that owns the record.
+ *
  * Returns the restored image record, or null when the trash no longer holds
  * it — the undo toast and the trash window can both aim at the same picture.
  */
-export async function untrashImage(imageId) {
+export async function untrashImage(imageId, overrides) {
   if (!imageId) return null;
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -436,7 +441,7 @@ export async function untrashImage(imageId) {
     req.onsuccess = () => {
       const entry = req.result;
       if (!entry) return;
-      record = toImageRecord(entry);
+      record = { ...toImageRecord(entry), ...(overrides ?? {}) };
       tx.objectStore("images").put(record);
       trashStore.delete(imageId);
     };
