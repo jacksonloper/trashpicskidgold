@@ -9,6 +9,8 @@ export default function Navbar({
   loadingExample,
   onImport,
   importing,
+  onOpenTrash,
+  trashCount,
 }) {
   const handleImportChange = (e) => {
     const files = Array.from(e.target.files ?? []);
@@ -70,13 +72,25 @@ export default function Navbar({
           />
         </label>
 
+        <button
+          type="button"
+          className="btn-small"
+          onClick={onOpenTrash}
+          title="Pictures removed from a story wait here until you empty the trash"
+        >
+          🗑️ Trash
+          {trashCount > 0 && (
+            <span className="trash-count-badge">{trashCount}</span>
+          )}
+        </button>
+
         {activeStoryId && (
           <button
             type="button"
             className="btn-small btn-danger"
             onClick={onDeleteStory}
           >
-            🗑️ Delete
+            🗑️ Delete story
           </button>
         )}
       </div>

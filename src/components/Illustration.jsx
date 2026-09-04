@@ -24,6 +24,9 @@ export default function Illustration({
   onCaptionChange,
   onGenerateIllustration,
   onPlanIllustration,
+  onUploadIllustration,
+  onTakeFromTrash,
+  trashCount,
   onRemove,
   onMoveUp,
   onMoveDown,
@@ -32,6 +35,16 @@ export default function Illustration({
   const [textModel, setTextModel] = useState(TEXT_MODELS[0].id);
   const [imageModel, setImageModel] = useState(IMAGE_MODELS[0].id);
   const canGenerate = !generating && !planning && caption.trim().length > 0;
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    // Reset first, so picking the same file twice still fires a change event.
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => onUploadIllustration(reader.result);
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div className="card illustration-card">
@@ -107,6 +120,36 @@ export default function Illustration({
           title="Plan the prompt first, then review and edit it before generating"
         >
           📝 Generate Text &amp; Preview
+        </button>
+      </div>
+
+      {/* Two ways to fill a page that don't cost a generation. They are not
+          the usual flow — the buttons above are — so they stay small and
+          quiet underneath them. */}
+      <div className="illustration-side-actions">
+        <label className="btn-tiny" title="Put a picture from this computer on this page">
+          📁 Upload illustration
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={handleFileChange}
+          />
+        </label>
+
+        <button
+          type="button"
+          className="btn-tiny"
+          onClick={onTakeFromTrash}
+          disabled={!trashCount}
+          title={
+            trashCount
+              ? "Put a picture you removed earlier on this page"
+              : "The trash is empty"
+          }
+        >
+          🗑️ Take illustration from trash
+          {trashCount > 0 && <> ({trashCount})</>}
         </button>
       </div>
 

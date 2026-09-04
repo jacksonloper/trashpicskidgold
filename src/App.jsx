@@ -12,6 +12,7 @@ import SectionIndex from "./components/SectionIndex";
 import ExportButtons from "./components/ExportButtons";
 import ConfirmDialog from "./components/ConfirmDialog";
 import UndoToast from "./components/UndoToast";
+import TrashBin from "./components/TrashBin";
 import {
   buildRefGraphicPrompt,
   planIllustration,
@@ -34,6 +35,12 @@ import {
   newSectionId,
   createBlankStory,
   migrateStory,
+  trashImage,
+  untrashImage,
+  listTrash,
+  countTrash,
+  deleteTrashedImage,
+  emptyTrash,
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
 import useSectionShortcuts from "./useSectionShortcuts";
@@ -68,6 +75,9 @@ function planNotice(plan) {
  * no server copy — so it asks the user to type the title back. Removing a
  * single panel is a far smaller loss, so it only interrupts when there is
  * artwork to lose, and never asks anyone to type anything.
+ *
+ * Emptying the trash is the only action here that actually destroys a
+ * picture, so it asks for typing too.
  */
 function confirmProps(pending) {
   if (pending.kind === "story") {
@@ -99,8 +109,9 @@ function confirmProps(pending) {
           </p>
           <p className="confirm-note">
             Stories live only in this browser, so there is no copy on a server
-            to fall back on. You will get a short window to undo — after that it
-            is gone for good. Export first if you want to keep it.
+            to fall back on. You will get a short window to undo — after that
+            the story itself is gone for good, though its pictures wait in the
+            trash until you empty it. Export first if you want to keep it.
           </p>
         </>
       ),
@@ -118,27 +129,75 @@ function confirmProps(pending) {
             Removing the page takes the picture out of the story with it.
           </p>
           <p className="confirm-note">
-            You will get a few seconds to undo. After that, getting this picture
-            back means generating it again.
+            You will get a few seconds to undo. After that the picture waits in
+            the trash, where you can put it back or throw it away for good.
           </p>
         </>
       ),
     };
   }
 
+  if (pending.kind === "refGraphic") {
+    return {
+      title: "Remove this reference graphic?",
+      confirmLabel: "🗑️ Remove reference",
+      message: (
+        <>
+          <p>
+            <strong>{pending.label}</strong> has an image. Removing it means new
+            illustrations will no longer use it to keep characters and scenes
+            looking consistent.
+          </p>
+          <p className="confirm-note">
+            You will get a few seconds to undo. After that the image waits in
+            the trash, where you can put it back or throw it away for good.
+          </p>
+        </>
+      ),
+    };
+  }
+
+  if (pending.kind === "trashItem") {
+    return {
+      title: "Throw this picture away for good?",
+      confirmLabel: "✕ Delete forever",
+      message: (
+        <>
+          <p>
+            <strong>{pending.label || "This picture"}</strong> will be gone from
+            this browser for good. Nothing puts it back.
+          </p>
+          <p className="confirm-note">
+            The rest of the trash is untouched.
+          </p>
+        </>
+      ),
+    };
+  }
+
+  const count = pending.count ?? 0;
   return {
-    title: "Remove this reference graphic?",
-    confirmLabel: "🗑️ Remove reference",
+    title: "Empty the trash?",
+    confirmLabel: "🧹 Empty trash",
+    confirmPhrase: "empty",
+    phraseLabel: (
+      <>
+        Type <code className="confirm-phrase">empty</code> to confirm
+      </>
+    ),
     message: (
       <>
         <p>
-          <strong>{pending.label}</strong> has an image. Removing it means new
-          illustrations will no longer use it to keep characters and scenes
-          looking consistent.
+          All{" "}
+          <strong>
+            {count} picture{count === 1 ? "" : "s"}
+          </strong>{" "}
+          in the trash will be gone from this browser for good. Each one is a
+          generation you paid for, and nothing puts them back.
         </p>
         <p className="confirm-note">
-          You will get a few seconds to undo. After that, getting this image
-          back means generating or uploading it again.
+          Any undo still on offer goes with them. Put back anything you want to
+          keep before emptying.
         </p>
       </>
     ),
@@ -165,6 +224,12 @@ export default function App() {
   const [importNote, setImportNote] = useState(null);
   const [confirm, setConfirm] = useState(null); // pending destructive action
   const [undo, setUndo] = useState(null); // last reversible deletion
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [trashItems, setTrashItems] = useState([]);
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [trashCount, setTrashCount] = useState(0); // badge on the navbar
+  const [trashBusyId, setTrashBusyId] = useState(null); // one item mid-action
+  const [trashPickSectionId, setTrashPickSectionId] = useState(null); // picker
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
   const [revealRequest, setRevealRequest] = useState(null); // { id } to show
 
@@ -259,6 +324,7 @@ export default function App() {
         const list = await listStories();
         setStoryList(list);
         if (list.length > 0) setActiveStoryId(list[0].id);
+        setTrashCount(await countTrash());
       } catch (e) {
         console.error("IndexedDB init error", e);
       }
@@ -385,6 +451,62 @@ export default function App() {
     setAllImages((prev) => ({ ...loaded, ...prev }));
   }, []);
 
+  /* ---- trash ---- */
+
+  /**
+   * Take a picture out of the story and put it in the trash.
+   *
+   * Every path that drops a picture goes through here, so a generation can
+   * only ever leave the story by way of the trash — never straight to gone.
+   * Failing to file it is not worth interrupting anyone over: the removal the
+   * user asked for has already happened either way.
+   */
+  const trashPicture = useCallback(async (imageId, origin, storyTitle) => {
+    if (!imageId) return;
+    try {
+      const entry = await trashImage(imageId, { origin, storyTitle });
+      if (entry) setTrashCount((n) => n + 1);
+    } catch (err) {
+      console.error("could not move the picture to the trash", err);
+    }
+  }, []);
+
+  /** Read the trash out of the database — the window's only source of truth. */
+  const loadTrash = useCallback(async () => {
+    setTrashLoading(true);
+    try {
+      const items = await listTrash();
+      setTrashItems(items);
+      setTrashCount(items.length);
+    } catch (err) {
+      setError("Could not open the trash: " + err.message);
+    } finally {
+      setTrashLoading(false);
+    }
+  }, []);
+
+  /** The navbar bin: everything in the trash, with the ways to clear it. */
+  const handleOpenTrash = useCallback(() => {
+    setTrashPickSectionId(null);
+    setTrashOpen(true);
+    loadTrash();
+  }, [loadTrash]);
+
+  /** The same window as a picker, opened by a page wanting a picture. */
+  const handleTakeFromTrash = useCallback(
+    (sectionId) => {
+      setTrashPickSectionId(sectionId);
+      setTrashOpen(true);
+      loadTrash();
+    },
+    [loadTrash]
+  );
+
+  const handleCloseTrash = useCallback(() => {
+    setTrashOpen(false);
+    setTrashPickSectionId(null);
+  }, []);
+
   /* ---- story CRUD ---- */
 
   /** Flush pending save before switching to a different story. */
@@ -430,7 +552,10 @@ export default function App() {
         }
       }
       const index = storyList.findIndex((s) => s.id === id);
+      // deleteStory moves the story's pictures into the trash rather than
+      // destroying them, so the badge has to grow by however many it took.
       const snapshot = await deleteStoryDb(id);
+      setTrashCount((n) => n + (snapshot.images?.length ?? 0));
       const remaining = storyList.filter((s) => s.id !== id);
       setStoryList(remaining);
       setUndo({
@@ -585,6 +710,7 @@ export default function App() {
       const index = referenceGraphics.findIndex((rg) => rg.id === rgId);
       if (index === -1 || !story) return;
       const removed = referenceGraphics[index];
+      trashPicture(removed.imageId, "reference", story.title);
       updateStory((s) => ({
         ...s,
         jsonblob: {
@@ -603,7 +729,7 @@ export default function App() {
         index,
       });
     },
-    [referenceGraphics, story, updateStory]
+    [referenceGraphics, story, trashPicture, updateStory]
   );
 
   /** ✕ on a reference graphic: ask first when there is an image to lose. */
@@ -656,6 +782,9 @@ export default function App() {
     async (rgId, kind, userPrompt, imageModel, label) => {
       if (!story) return;
       setError(null);
+      // Whatever is on this reference now is about to be replaced; hold on to
+      // its id so the old picture can go to the trash rather than nowhere.
+      const replaced = referenceGraphics.find((rg) => rg.id === rgId)?.imageId;
       setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
       try {
         const prompt = buildRefGraphicPrompt(style, kind, userPrompt, label);
@@ -680,19 +809,21 @@ export default function App() {
             ),
           },
         }));
+        await trashPicture(replaced, "replaced", story.title);
       } catch (err) {
         setError(err.message);
       } finally {
         setGeneratingRefIds((prev) => ({ ...prev, [rgId]: false }));
       }
     },
-    [apiKey, style, story, updateStory]
+    [apiKey, referenceGraphics, style, story, trashPicture, updateStory]
   );
 
   const handleUploadRefGraphic = useCallback(
     async (rgId, dataUrl) => {
       if (!story) return;
       setError(null);
+      const replaced = referenceGraphics.find((rg) => rg.id === rgId)?.imageId;
       try {
         const imgId = newImageId();
         await saveImage({
@@ -712,11 +843,12 @@ export default function App() {
             ),
           },
         }));
+        await trashPicture(replaced, "replaced", story.title);
       } catch (err) {
         setError(err.message);
       }
     },
-    [story, updateStory]
+    [referenceGraphics, story, trashPicture, updateStory]
   );
 
   /* ---- keeping the open section in view ---- */
@@ -835,6 +967,9 @@ export default function App() {
       const index = sections.findIndex((sec) => sec.id === sectionId);
       if (index === -1 || !story) return;
       const removed = sections[index];
+      if (removed.type === "illustration") {
+        trashPicture(removed.imageId, "page", story.title);
+      }
       updateStory((s) => ({
         ...s,
         jsonblob: {
@@ -856,7 +991,7 @@ export default function App() {
         setActiveSectionId(next?.id ?? null);
       }
     },
-    [activeSectionId, sections, story, updateStory]
+    [activeSectionId, sections, story, trashPicture, updateStory]
   );
 
   /** ✕ on a section: ask first when there is a generated illustration to lose. */
@@ -915,6 +1050,35 @@ export default function App() {
     [updateStory]
   );
 
+  /**
+   * Put a picture from the user's own computer on a page.
+   *
+   * Same swap as generating one, minus the API call — a scan, a photo, a
+   * picture from somewhere else. Whatever the page held goes to the trash.
+   */
+  const handleUploadIllustration = useCallback(
+    async (sectionId, dataUrl) => {
+      const sec = sections.find((x) => x.id === sectionId);
+      if (!sec || !story) return;
+      setError(null);
+      try {
+        const imgId = newImageId();
+        await saveImage({
+          id: imgId,
+          storyId: story.id,
+          caption: sec.caption ?? "",
+          data: dataUrl,
+        });
+        setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
+        updateSectionField(sectionId, "imageId", imgId);
+        await trashPicture(sec.imageId, "replaced", story.title);
+      } catch (err) {
+        setError("Could not put that picture on the page: " + err.message);
+      }
+    },
+    [sections, story, trashPicture, updateSectionField]
+  );
+
   /* ---- section navigation ---- */
 
   const handleSelectSection = useCallback(
@@ -954,8 +1118,106 @@ export default function App() {
   // Off while a dialog owns the keyboard, so Escape-and-arrow habits inside
   // the plan or confirm dialogs don't move the story underneath them.
   useSectionShortcuts(
-    !!story && !illustrationPlan && !confirm && sections.length > 0,
+    !!story && !illustrationPlan && !confirm && !trashOpen && sections.length > 0,
     navigateSections
+  );
+
+  /* ---- acting on what is in the trash ---- */
+
+  /**
+   * Put a picture from the trash onto the page that asked for it.
+   *
+   * It may have come from another story, so the record is re-stamped on the
+   * way out: the images store is indexed by story, and a picture still
+   * carrying its old story's id would be swept up when that story is deleted.
+   */
+  const handleUseTrashedPicture = useCallback(
+    async (entry) => {
+      const sectionId = trashPickSectionId;
+      const sec = sections.find((x) => x.id === sectionId);
+      if (!sec || !story) return;
+      setTrashBusyId(entry.id);
+      setError(null);
+      try {
+        await flushSave();
+        const replaced = sec.imageId;
+        const picture = await untrashImage(entry.id, {
+          storyId: story.id,
+          caption: sec.caption || entry.caption || "",
+        });
+        if (!picture) {
+          setError("That picture is no longer in the trash.");
+          return;
+        }
+        setAllImages((prev) => ({ ...prev, [picture.id]: picture.data }));
+        updateSectionField(sectionId, "imageId", picture.id);
+        // A straight swap: what was on the page takes the picture's place.
+        await trashPicture(replaced, "replaced", story.title);
+        setTrashOpen(false);
+        setTrashPickSectionId(null);
+        requestReveal(sectionId);
+      } catch (err) {
+        setError("Could not take that picture out of the trash: " + err.message);
+      } finally {
+        setTrashBusyId(null);
+        await loadTrash();
+      }
+    },
+    [
+      flushSave,
+      loadTrash,
+      requestReveal,
+      sections,
+      story,
+      trashPicture,
+      trashPickSectionId,
+      updateSectionField,
+    ]
+  );
+
+  /** The one place a picture is actually destroyed, one at a time. */
+  const destroyTrashedNow = useCallback(
+    async (imageId) => {
+      setTrashBusyId(imageId);
+      try {
+        await deleteTrashedImage(imageId);
+      } catch (err) {
+        setError("Could not empty that out of the trash: " + err.message);
+      } finally {
+        setTrashBusyId(null);
+        await loadTrash();
+      }
+    },
+    [loadTrash]
+  );
+
+  /** …and the one place every picture in the trash is destroyed at once. */
+  const emptyTrashNow = useCallback(async () => {
+    try {
+      await emptyTrash();
+      // An undo toast still on screen offers to put back a picture that no
+      // longer exists; the panel would come back bare. Close the offer.
+      setUndo(null);
+    } catch (err) {
+      setError("Could not empty the trash: " + err.message);
+    } finally {
+      await loadTrash();
+    }
+  }, [loadTrash]);
+
+  const handleRequestDestroyTrashed = useCallback(
+    (entry) =>
+      setConfirm({
+        kind: "trashItem",
+        id: entry.id,
+        label: entry.caption || "This picture",
+      }),
+    []
+  );
+
+  const handleRequestEmptyTrash = useCallback(
+    () => setConfirm({ kind: "emptyTrash", count: trashItems.length }),
+    [trashItems.length]
   );
 
   /* ---- confirm / undo dispatch ---- */
@@ -969,7 +1231,16 @@ export default function App() {
     if (pending.kind === "story") deleteStoryNow(pending.id, pending.title);
     else if (pending.kind === "section") removeSectionNow(pending.sectionId);
     else if (pending.kind === "refGraphic") removeRefGraphicNow(pending.rgId);
-  }, [confirm, deleteStoryNow, removeRefGraphicNow, removeSectionNow]);
+    else if (pending.kind === "trashItem") destroyTrashedNow(pending.id);
+    else if (pending.kind === "emptyTrash") emptyTrashNow();
+  }, [
+    confirm,
+    deleteStoryNow,
+    destroyTrashedNow,
+    emptyTrashNow,
+    removeRefGraphicNow,
+    removeSectionNow,
+  ]);
 
   const handleDismissUndo = useCallback(() => setUndo(null), []);
 
@@ -981,7 +1252,11 @@ export default function App() {
 
     if (pending.kind === "story") {
       if (!pending.snapshot?.story) return;
+      // restoreStory takes the story's pictures back out of the trash too.
       await restoreStory(pending.snapshot);
+      setTrashCount((n) =>
+        Math.max(0, n - (pending.snapshot.images?.length ?? 0))
+      );
       const entry = {
         id: pending.snapshot.story.id,
         title: pending.snapshot.story.title,
@@ -1000,6 +1275,15 @@ export default function App() {
     const key = pending.kind === "section" ? "sections" : "referenceGraphics";
     const item =
       pending.kind === "section" ? pending.section : pending.refGraphic;
+
+    // The picture went to the trash when its panel did, so it comes back with
+    // it. Null when the trash was emptied inside the undo window — the panel
+    // still returns, just without its artwork.
+    const picture = await untrashImage(item.imageId);
+    if (picture) {
+      setTrashCount((n) => Math.max(0, n - 1));
+      setAllImages((prev) => ({ ...prev, [picture.id]: picture.data }));
+    }
 
     updateStory((s) => {
       // Guard against the story having been switched out from under the toast.
@@ -1101,17 +1385,22 @@ export default function App() {
         );
 
         const imgId = newImageId();
-        const caption = sections.find((x) => x.id === sectionId)?.caption;
+        const previous = sections.find((x) => x.id === sectionId);
         await saveImage({
           id: imgId,
           storyId: story.id,
-          caption,
+          caption: previous?.caption,
           data: dataUrl,
         });
 
         setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
         // Dropped harmlessly if the page was removed while this was in flight.
         updateSectionField(sectionId, "imageId", imgId);
+        // Re-generating a page is the quietest way to lose a picture: no
+        // dialog, no toast, the old one simply stops being shown. It goes to
+        // the trash like any other removal. (Already trashed, if the page was
+        // removed mid-flight — filing it twice is a no-op.)
+        await trashPicture(previous?.imageId, "replaced", story.title);
         return { ok: true, error: null };
       } catch (err) {
         setError(err.message);
@@ -1120,7 +1409,15 @@ export default function App() {
         setGeneratingSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [apiKey, allImages, flushSave, sections, story, updateSectionField]
+    [
+      apiKey,
+      allImages,
+      flushSave,
+      sections,
+      story,
+      trashPicture,
+      updateSectionField,
+    ]
   );
 
   /** Plan only, then open the review modal. */
@@ -1192,6 +1489,13 @@ export default function App() {
    * Planning takes seconds, and with one section on screen at a time the
    * modal can easily open over a different page than the one it is for.
    */
+  /** The page the trash picker was opened from, named the way its card is. */
+  const trashPickLabel = useMemo(() => {
+    if (!trashPickSectionId) return null;
+    const idx = sections.findIndex((sec) => sec.id === trashPickSectionId);
+    return idx === -1 ? null : sectionTitle(sections[idx], idx);
+  }, [sections, trashPickSectionId]);
+
   const planSectionLabel = useMemo(() => {
     if (!illustrationPlan) return null;
     const idx = sections.findIndex(
@@ -1221,6 +1525,8 @@ export default function App() {
         loadingExample={loadingExample}
         onImport={handleImport}
         importing={importing}
+        onOpenTrash={handleOpenTrash}
+        trashCount={trashCount}
       />
 
       <div className="app">
@@ -1373,6 +1679,13 @@ export default function App() {
                       onPlanIllustration={(textModel) =>
                         handlePlanIllustration(activeSection.id, textModel)
                       }
+                      onUploadIllustration={(dataUrl) =>
+                        handleUploadIllustration(activeSection.id, dataUrl)
+                      }
+                      onTakeFromTrash={() =>
+                        handleTakeFromTrash(activeSection.id)
+                      }
+                      trashCount={trashCount}
                       onImageShown={() => handleImageShown(activeSection.id)}
                       onRemove={() => handleRemoveSection(activeSection.id)}
                       onMoveUp={
@@ -1434,6 +1747,21 @@ export default function App() {
           sections={sections}
           onApprove={handleApproveIllustration}
           onCancel={handleCancelPlan}
+        />
+      )}
+
+      {/* Pictures taken out of a story, waiting to be put back or emptied */}
+      {trashOpen && (
+        <TrashBin
+          items={trashItems}
+          loading={trashLoading}
+          busyId={trashBusyId}
+          dialogOpen={!!confirm}
+          pickLabel={trashPickLabel}
+          onUse={handleUseTrashedPicture}
+          onDeleteForever={handleRequestDestroyTrashed}
+          onEmpty={handleRequestEmptyTrash}
+          onClose={handleCloseTrash}
         />
       )}
 
