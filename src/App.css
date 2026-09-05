@@ -400,6 +400,32 @@
   border: 1px solid #e0e0e0;
 }
 
+/*
+ * A picture is worth having all of at once.
+ *
+ * Width alone doesn't do it: a tall picture in an 800px column runs off the
+ * bottom of the window, and turning to that page shows its top half. So cap
+ * the height at what is left of the window under the sticky navbar — the same
+ * band `scrollIntoViewFully` aims into — and the whole picture lands on screen
+ * at once. `max-width` is still there, so a wide one is still held by the
+ * column; whichever runs out first wins, and the aspect ratio comes along.
+ *
+ * Not on a phone. The window is short enough there that the cap would bite on
+ * an ordinary portrait picture and shrink it for a reader who is already
+ * scrolling, and mobile browsers move the bottom of `100vh` around under the
+ * toolbar. `100dvh` for the browsers that have it, since the toolbar comes and
+ * goes on a small laptop window too.
+ *
+ * The 2.5rem is the card: 1.5rem of padding under the picture, plus a little
+ * air so the bottom edge isn't flush against the window.
+ */
+@media (min-width: 40rem) {
+  .image-preview img {
+    max-height: calc(100vh - var(--navbar-height, 3.5rem) - 2.5rem);
+    max-height: calc(100dvh - var(--navbar-height, 3.5rem) - 2.5rem);
+  }
+}
+
 /* ---- Error banner ---- */
 
 /* ---- Age Gate ---- */
