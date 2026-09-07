@@ -13,6 +13,7 @@ import ExportButtons from "./components/ExportButtons";
 import ConfirmDialog from "./components/ConfirmDialog";
 import UndoToast from "./components/UndoToast";
 import TrashBin from "./components/TrashBin";
+import WaitingGame from "./components/WaitingGame";
 import {
   buildRefGraphicPrompt,
   planIllustration,
@@ -44,6 +45,7 @@ import {
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
 import useSectionShortcuts from "./useSectionShortcuts";
+import useWaitingGame from "./useWaitingGame";
 import scrollIntoViewFully from "./scrollIntoViewFully";
 import {
   readStoryBundle,
@@ -1115,10 +1117,68 @@ export default function App() {
     [navigateSections]
   );
 
+  /* ---- something to do while a picture is made ---- */
+
+  /**
+   * The wait the game is covering, or null when nothing is being made.
+   *
+   * Reference art and page illustrations are the same wait to the kid sitting
+   * there, so both fill it. So does planning: "Generate Illustration" spends
+   * its first several seconds there before an image is ever requested, and a
+   * game that started only at the image would leave that part bare.
+   */
+  const waitingJob = useMemo(() => {
+    const refId = Object.keys(generatingRefIds).find(
+      (id) => generatingRefIds[id]
+    );
+    if (refId) {
+      const rg = referenceGraphics.find((x) => x.id === refId);
+      return {
+        kind: "reference",
+        label: rg?.label?.trim() || "your reference art",
+      };
+    }
+
+    const drawing = Object.keys(generatingSections).find(
+      (id) => generatingSections[id]
+    );
+    const thinking = Object.keys(planningSections).find(
+      (id) => planningSections[id]
+    );
+    const id = drawing ?? thinking;
+    if (!id) return null;
+    const index = sections.findIndex((sec) => sec.id === id);
+    return {
+      kind: drawing ? "illustration" : "planning",
+      label: index === -1 ? null : sectionTitle(sections[index], index),
+    };
+  }, [
+    generatingRefIds,
+    generatingSections,
+    planningSections,
+    referenceGraphics,
+    sections,
+  ]);
+
+  const waitGame = useWaitingGame({
+    job: waitingJob,
+    // A dialog is a grown-up talking: the game steps aside for one and comes
+    // back afterwards if the picture is still on its way.
+    suspended: !!illustrationPlan || !!confirm || trashOpen,
+    error,
+    planOpen: !!illustrationPlan,
+  });
+
   // Off while a dialog owns the keyboard, so Escape-and-arrow habits inside
-  // the plan or confirm dialogs don't move the story underneath them.
+  // the plan or confirm dialogs don't move the story underneath them. The
+  // game wants the arrow keys for itself, too.
   useSectionShortcuts(
-    !!story && !illustrationPlan && !confirm && !trashOpen && sections.length > 0,
+    !!story &&
+      !illustrationPlan &&
+      !confirm &&
+      !trashOpen &&
+      !waitGame.visible &&
+      sections.length > 0,
     navigateSections
   );
 
@@ -1735,6 +1795,33 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Paint to catch while the model paints. Kept mounted while it is put
+          away, so the picture the player is making survives being hidden. */}
+      {waitGame.session && (
+        <WaitingGame
+          kind={waitGame.session.kind}
+          label={waitGame.session.label}
+          phase={waitGame.session.phase}
+          outcome={waitGame.session.outcome}
+          doneAt={waitGame.session.doneAt}
+          visible={waitGame.visible}
+          autoOpen={waitGame.autoOpen}
+          onAutoOpenChange={waitGame.setAutoOpen}
+          onHide={waitGame.hide}
+          onClose={waitGame.close}
+        />
+      )}
+
+      {waitGame.chip && (
+        <button
+          type="button"
+          className="waiting-game-chip"
+          onClick={waitGame.open}
+        >
+          🎮 Play while you wait
+        </button>
+      )}
 
       {/* Illustration plan approval modal */}
       {illustrationPlan && (
