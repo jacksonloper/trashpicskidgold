@@ -45,9 +45,21 @@ const MAX_STEP = 0.05; // s — a backgrounded tab must not teleport the drops
  * time — a small screen held in two hands is harder than a mouse on a desk.
  */
 const TOUCH_REST = 0.17; // of the height, kept clear below the bucket
-const TOUCH_REST_MIN = 60; // px, never less than a fingertip
+const TOUCH_REST_MIN = 48; // px, never less than a fingertip
 const TOUCH_REST_MAX = 120; // px, never so much that the paper feels short
+const TOUCH_REST_SHARE = 0.25; // …and never a quarter of a short, sideways screen
 const TOUCH_SLOWER = 1.25; // longer to fall, on a screen you play with a thumb
+
+/*
+ * The strips of glass down the left and right edges belong to the phone, not to
+ * us: Android's gesture navigation reads a swipe that starts within about 24 px
+ * of either side as Back, and on a Samsung the right-hand strip is an edge
+ * panel as well. A drop that lands in there asks the player to put a finger
+ * somewhere that quietly leaves the app — mid-generation, with the picture not
+ * yet saved — so on a touch screen no drop is ever dealt into those strips.
+ */
+const TOUCH_EDGE = 0.08; // of the width, left clear at each side
+const TOUCH_EDGE_MIN = 28; // px — comfortably outside the system's own strip
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
@@ -266,8 +278,13 @@ export function createPaintCatcher({ paper, sprites }, options = {}) {
       : Math.max(72, Math.min(150, width * 0.17));
     catcher.h = Math.max(26, Math.min(38, height * 0.06));
     // The strip of glass below the bucket that the steering hand rests on.
+    // Turned sideways there is much less height to give away, so it is capped
+    // as a share of the stage as well.
     const rest = touch
-      ? Math.max(TOUCH_REST_MIN, Math.min(TOUCH_REST_MAX, height * TOUCH_REST))
+      ? Math.min(
+          Math.max(TOUCH_REST_MIN, Math.min(TOUCH_REST_MAX, height * TOUCH_REST)),
+          height * TOUCH_REST_SHARE
+        )
       : 16;
     catcher.y = height - catcher.h - rest;
     catcher.x = Math.min(
@@ -290,8 +307,9 @@ export function createPaintCatcher({ paper, sprites }, options = {}) {
       lerp(BASE_FALL, FAST_FALL, progress) *
       (calm ? 1.35 : 1) *
       (touch ? TOUCH_SLOWER : 1);
+    const edge = touch ? Math.max(TOUCH_EDGE_MIN, width * TOUCH_EDGE) : 10;
     drops.push({
-      x: rand(r + 10, Math.max(r + 11, width - r - 10)),
+      x: rand(r + edge, Math.max(r + edge + 1, width - r - edge)),
       y: -r * 2,
       r,
       vy: (height + r * 4) / fall,
@@ -347,7 +365,10 @@ export function createPaintCatcher({ paper, sprites }, options = {}) {
 
       const inBand =
         d.y + d.r >= catcher.y && d.y - d.r <= catcher.y + catcher.h * 0.9;
-      if (inBand && Math.abs(d.x - catcher.x) <= catcher.w * 0.46 + d.r) {
+      // A shade wider than the bucket looks, never narrower: a four-year-old
+      // who can see the drop land in it and is told they missed is done
+      // playing.
+      if (inBand && Math.abs(d.x - catcher.x) <= catcher.w * 0.5 + d.r * 0.6) {
         drops.splice(i, 1);
         score += d.kind === "star" ? 5 : 1;
         combo += 1;

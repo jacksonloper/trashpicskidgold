@@ -32,7 +32,10 @@ On a touch screen it plays differently, because a hand steering a bucket at the
 bottom edge is a hand covering the bucket: there the bucket is wider, rides well
 up from the bottom with a strip of glass left below it to drag a thumb in, and
 gives a little more time to reach each drop. The grown-up's controls move above
-the paper on a phone, too, so nothing mid-drag lands on **Hide game**.
+the paper — keyed on the pointer, not the window's width, so a phone turned
+sideways gets the same treatment — and no drop is ever dealt into the strips
+down either side of the screen, where an Android swipe means Back and would
+walk out of the app with the picture still being made.
 
 When the picture is ready the game says so and bows out after seven seconds:
 **See my picture** goes straight there, **Keep playing** cancels the countdown.

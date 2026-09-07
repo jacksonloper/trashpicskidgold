@@ -1353,32 +1353,13 @@
 }
 
 /*
- * A phone gets the whole window and drops the hint, which the first ten
- * seconds of playing explain better anyway.
- *
- * The grown-up's controls move above the paper, out of the way of the hand
- * playing the game: at the bottom of a phone they sit exactly where a thumb
- * rests, and "Hide game" is not something to hit by accident mid-drag.
- * `dvh` because a fixed overlay and iOS's disappearing address bar disagree
- * about how tall the window is.
+ * Anything played with fingers, however wide the window: the grown-up's
+ * controls move above the paper. At the bottom they sit exactly where a thumb
+ * rests, and "Hide game" is not something to hit by accident mid-drag. Keyed
+ * on the pointer rather than on width, because a phone turned sideways is a
+ * wide window that is still all thumbs.
  */
-@media (max-width: 34rem) {
-  .waiting-game {
-    padding: 0;
-    height: 100dvh;
-    /* The panel covers the whole screen here, so the blur behind it renders
-       nothing anyone can see — and a full-screen backdrop filter is one of the
-       most expensive things you can ask a phone GPU for, every frame. */
-    backdrop-filter: none;
-  }
-
-  .waiting-game-panel {
-    width: 100%;
-    height: 100%;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
+@media (pointer: coarse) {
   .waiting-game-bar {
     order: 1;
   }
@@ -1395,9 +1376,46 @@
   .waiting-game-stage {
     order: 3;
   }
+}
+
+/*
+ * A phone, either way up: the whole window, and no hint — which the first ten
+ * seconds of playing explain better anyway. `dvh` because a fixed overlay and a
+ * browser's disappearing address bar (at the bottom of the screen, in Samsung
+ * Internet) disagree about how tall the window is.
+ */
+@media (max-width: 34rem), (pointer: coarse) and (max-height: 34rem) {
+  .waiting-game {
+    padding: 0;
+    height: 100dvh;
+    /* The panel covers the whole screen here, so the blur behind it renders
+       nothing anyone can see — and a full-screen backdrop filter is one of the
+       most expensive things you can ask a phone GPU for, every frame. */
+    backdrop-filter: none;
+  }
+
+  .waiting-game-panel {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    box-shadow: none;
+  }
 
   .waiting-game-hint {
     display: none;
+  }
+}
+
+/* Sideways on a phone there are only a few hundred pixels of height to share
+   out, and two rows of chrome must not eat a quarter of them. */
+@media (pointer: coarse) and (max-height: 34rem) {
+  .waiting-game-bar {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .waiting-game-foot {
+    padding: 0.2rem 0.75rem;
   }
 }
 
