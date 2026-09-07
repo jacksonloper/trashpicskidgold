@@ -7,8 +7,8 @@
  * be lost — a missed drop just splashes on the floor — because the player is
  * four and the point is to make ninety seconds feel like ten.
  *
- * It is deliberately framework-free: React owns the canvas element and the
- * chrome around it, this owns every pixel inside and the loop that moves them.
+ * It is deliberately framework-free: React owns the two canvas elements and the
+ * chrome around them, this owns every pixel inside and the loop that moves them.
  * The only thing that crosses back is `onEvent`, which fires on a catch or a
  * miss so the HUD can show a score.
  */
@@ -34,6 +34,20 @@ const RAMP = 75; // seconds it takes to work all the way up to the fast end
 const STAR_CHANCE = 0.09; // how often a drop is a five-point star instead
 const STEER_SPEED = 720; // px/s when the arrow keys are doing the steering
 const MAX_STEP = 0.05; // s — a backgrounded tab must not teleport the drops
+
+/*
+ * A finger is not a mouse.
+ *
+ * On a phone the hand steering the bucket sits on the glass, so a bucket at the
+ * bottom edge is a bucket underneath a palm: the player cannot see the thing
+ * they are aiming. So on a touch screen the bucket rides well up from the
+ * bottom, leaving a strip below it to drag in, and it is wider and given more
+ * time — a small screen held in two hands is harder than a mouse on a desk.
+ */
+const TOUCH_REST = 0.17; // of the height, kept clear below the bucket
+const TOUCH_REST_MIN = 60; // px, never less than a fingertip
+const TOUCH_REST_MAX = 120; // px, never so much that the paper feels short
+const TOUCH_SLOWER = 1.25; // longer to fall, on a screen you play with a thumb
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
@@ -169,15 +183,27 @@ function drawBucket(g, c) {
   g.fill();
 }
 
-export function createPaintCatcher(canvas, options = {}) {
+/**
+ * @param layers  {paper, sprites} – two stacked canvases of the same size. The
+ *   paper keeps the painting and is only touched when a drop lands; the sprite
+ *   layer is cleared and redrawn every frame. Two elements rather than one is
+ *   what keeps a phone at sixty: the browser composites them, so the painting
+ *   is never re-blitted through canvas 2D on the way to the screen.
+ * @param options {onEvent}
+ */
+export function createPaintCatcher({ paper, sprites }, options = {}) {
   const onEvent = options.onEvent ?? (() => {});
   const calm =
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-  const ctx = canvas.getContext("2d");
-  let paint = document.createElement("canvas");
-  let paintCtx = paint.getContext("2d");
+  const ctx = sprites.getContext("2d");
+  const paintCtx = paper.getContext("2d");
+
+  // Coarse pointer means fingers, whatever the window's width says.
+  const touch =
+    typeof window !== "undefined" &&
+    !!window.matchMedia?.("(pointer: coarse)").matches;
 
   let width = 1;
   let height = 1;
@@ -201,12 +227,12 @@ export function createPaintCatcher(canvas, options = {}) {
   /**
    * Re-fit to the element's box, keeping the painting so far.
    *
-   * The paper is a second canvas at the same device resolution; on a resize it
-   * is redrawn into the new one stretched, which is imperfect and much kinder
-   * than throwing away what the player has painted.
+   * Resizing a canvas clears it, so the paper is copied out and drawn back
+   * stretched — imperfect, and much kinder than throwing away what the player
+   * has painted.
    */
   function fit() {
-    const rect = canvas.getBoundingClientRect();
+    const rect = sprites.getBoundingClientRect();
     const w = Math.max(1, Math.round(rect.width));
     const h = Math.max(1, Math.round(rect.height));
     const ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -216,28 +242,34 @@ export function createPaintCatcher(canvas, options = {}) {
     if (w < 8 || h < 8) return;
     if (w === width && h === height && ratio === dpr) return;
 
-    const previous = paint;
-    const hadPaint = width > 1 && height > 1;
+    let kept = null;
+    if (width > 1 && height > 1) {
+      kept = document.createElement("canvas");
+      kept.width = paper.width;
+      kept.height = paper.height;
+      kept.getContext("2d").drawImage(paper, 0, 0);
+    }
 
     width = w;
     height = h;
     dpr = ratio;
 
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-
-    paint = document.createElement("canvas");
-    paint.width = canvas.width;
-    paint.height = canvas.height;
-    paintCtx = paint.getContext("2d");
-    paintCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (hadPaint) {
-      paintCtx.drawImage(previous, 0, 0, width, height);
+    for (const layer of [paper, sprites]) {
+      layer.width = Math.round(width * dpr);
+      layer.height = Math.round(height * dpr);
     }
+    paintCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (kept) paintCtx.drawImage(kept, 0, 0, width, height);
 
-    catcher.w = Math.max(72, Math.min(150, width * 0.17));
+    catcher.w = touch
+      ? Math.max(96, Math.min(170, width * 0.26))
+      : Math.max(72, Math.min(150, width * 0.17));
     catcher.h = Math.max(26, Math.min(38, height * 0.06));
-    catcher.y = height - catcher.h - 16;
+    // The strip of glass below the bucket that the steering hand rests on.
+    const rest = touch
+      ? Math.max(TOUCH_REST_MIN, Math.min(TOUCH_REST_MAX, height * TOUCH_REST))
+      : 16;
+    catcher.y = height - catcher.h - rest;
     catcher.x = Math.min(
       Math.max(catcher.x || width / 2, catcher.w / 2 + 4),
       width - catcher.w / 2 - 4
@@ -254,7 +286,10 @@ export function createPaintCatcher(canvas, options = {}) {
     const progress = Math.min(1, elapsed / RAMP);
     const star = Math.random() < STAR_CHANCE;
     const r = star ? 11 : rand(9, 14);
-    const fall = lerp(BASE_FALL, FAST_FALL, progress) * (calm ? 1.35 : 1);
+    const fall =
+      lerp(BASE_FALL, FAST_FALL, progress) *
+      (calm ? 1.35 : 1) *
+      (touch ? TOUCH_SLOWER : 1);
     drops.push({
       x: rand(r + 10, Math.max(r + 11, width - r - 10)),
       y: -r * 2,
@@ -336,7 +371,7 @@ export function createPaintCatcher(canvas, options = {}) {
         drops.splice(i, 1);
         combo = 0;
         // A miss costs nothing but a puddle on the floor.
-        splat(paintCtx, d.x, height - 6, d.color, 0.45, 0.3);
+        splat(paintCtx, d.x, height - 4, d.color, 0.45, 0.3);
         onEvent({ type: "miss", kind: d.kind, score, combo });
       }
     }
@@ -357,7 +392,6 @@ export function createPaintCatcher(canvas, options = {}) {
   function draw() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(paint, 0, 0, width, height);
 
     for (const d of drops) drawDrop(ctx, d);
 
@@ -389,7 +423,7 @@ export function createPaintCatcher(canvas, options = {}) {
           fit();
           if (!running) draw();
         });
-  observer?.observe(canvas);
+  observer?.observe(sprites);
   fit();
   draw();
 

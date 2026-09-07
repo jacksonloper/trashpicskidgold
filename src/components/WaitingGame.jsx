@@ -50,7 +50,8 @@ export default function WaitingGame({
   onHide,
   onClose,
 }) {
-  const canvasRef = useRef(null);
+  const paperRef = useRef(null);
+  const spritesRef = useRef(null);
   const gameRef = useRef(null);
   const cheerTimer = useRef(null);
   const closeRef = useRef(onClose);
@@ -72,25 +73,29 @@ export default function WaitingGame({
   /* ---- the game itself ---- */
 
   useEffect(() => {
-    const game = createPaintCatcher(canvasRef.current, {
-      onEvent: (e) => {
-        if (e.type !== "catch") return;
-        setScore(e.score);
+    const game = createPaintCatcher(
+      { paper: paperRef.current, sprites: spritesRef.current },
+      {
+        onEvent: (e) => {
+          if (e.type !== "catch") return;
+          setScore(e.score);
 
-        let message = null;
-        if (e.kind === "star") message = "⭐ Star! Five points!";
-        else if (e.combo === 5) message = "Five in a row!";
-        else if (e.combo === 10) message = "Ten in a row! Wow!";
-        else if (e.combo > 0 && e.combo % 25 === 0) message = `${e.combo} in a row!!`;
-        else if (Math.random() < 0.12)
-          message = CHEERS[Math.floor(Math.random() * CHEERS.length)];
-        if (!message) return;
+          let message = null;
+          if (e.kind === "star") message = "⭐ Star! Five points!";
+          else if (e.combo === 5) message = "Five in a row!";
+          else if (e.combo === 10) message = "Ten in a row! Wow!";
+          else if (e.combo > 0 && e.combo % 25 === 0)
+            message = `${e.combo} in a row!!`;
+          else if (Math.random() < 0.12)
+            message = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+          if (!message) return;
 
-        setCheer(message);
-        clearTimeout(cheerTimer.current);
-        cheerTimer.current = setTimeout(() => setCheer(null), 1600);
-      },
-    });
+          setCheer(message);
+          clearTimeout(cheerTimer.current);
+          cheerTimer.current = setTimeout(() => setCheer(null), 1600);
+        },
+      }
+    );
     gameRef.current = game;
     return () => {
       clearTimeout(cheerTimer.current);
@@ -237,7 +242,9 @@ export default function WaitingGame({
           onPointerDown={handlePointer}
           onPointerLeave={handlePointerLeave}
         >
-          <canvas ref={canvasRef} className="waiting-game-canvas" />
+          {/* The paper keeps the painting; the sprites move over it. */}
+          <canvas ref={paperRef} className="waiting-game-canvas" />
+          <canvas ref={spritesRef} className="waiting-game-canvas" />
 
           {card && (
             <div className="waiting-game-card">

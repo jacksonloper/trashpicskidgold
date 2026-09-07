@@ -28,6 +28,12 @@ own behind. Stars are worth five. Nothing can be lost — a missed drop just
 splashes on the floor — because the player is four and the point is to make
 ninety seconds feel like ten.
 
+On a touch screen it plays differently, because a hand steering a bucket at the
+bottom edge is a hand covering the bucket: there the bucket is wider, rides well
+up from the bottom with a strip of glass left below it to drag a thumb in, and
+gives a little more time to reach each drop. The grown-up's controls move above
+the paper on a phone, too, so nothing mid-drag lands on **Hide game**.
+
 When the picture is ready the game says so and bows out after seven seconds:
 **See my picture** goes straight there, **Keep playing** cancels the countdown.
 A wait that ends in a failure says so instead and closes, leaving the error

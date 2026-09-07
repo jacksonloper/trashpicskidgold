@@ -1135,6 +1135,10 @@
   padding: 1rem;
   background: rgba(22, 18, 34, 0.6);
   backdrop-filter: blur(4px);
+  /* Nothing in here scrolls, and a phone that thinks otherwise turns a drag
+     across the paper into a pull-to-refresh that throws the generation away. */
+  overscroll-behavior: none;
+  touch-action: none;
 }
 
 /* Put away, not unmounted: the paper keeps every splat already on it. */
@@ -1240,7 +1244,8 @@
 }
 
 /* The paper. `touch-action` matters: a finger dragging the bucket must not
-   also be scrolling the page behind the overlay. */
+   also be scrolling the page behind the overlay, and a finger held still on it
+   must not raise a text selection or a callout either. */
 .waiting-game-stage {
   position: relative;
   flex: 1;
@@ -1251,9 +1256,16 @@
   touch-action: none;
   cursor: crosshair;
   overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
+/* Two of them, stacked: the painting underneath, the moving pieces on top. */
 .waiting-game-canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -1340,25 +1352,52 @@
   background: #3367d6;
 }
 
-/* A phone gets the whole window and drops the hint, which the first ten
-   seconds of playing explain better anyway. */
+/*
+ * A phone gets the whole window and drops the hint, which the first ten
+ * seconds of playing explain better anyway.
+ *
+ * The grown-up's controls move above the paper, out of the way of the hand
+ * playing the game: at the bottom of a phone they sit exactly where a thumb
+ * rests, and "Hide game" is not something to hit by accident mid-drag.
+ * `dvh` because a fixed overlay and iOS's disappearing address bar disagree
+ * about how tall the window is.
+ */
 @media (max-width: 34rem) {
   .waiting-game {
     padding: 0;
+    height: 100dvh;
+    /* The panel covers the whole screen here, so the blur behind it renders
+       nothing anyone can see — and a full-screen backdrop filter is one of the
+       most expensive things you can ask a phone GPU for, every frame. */
+    backdrop-filter: none;
   }
 
   .waiting-game-panel {
     width: 100%;
     height: 100%;
     border-radius: 0;
+    box-shadow: none;
+  }
+
+  .waiting-game-bar {
+    order: 1;
+  }
+
+  .waiting-game-foot {
+    order: 2;
+    justify-content: flex-end;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    border-top: none;
+    border-bottom: 1px solid #eee;
+  }
+
+  .waiting-game-stage {
+    order: 3;
   }
 
   .waiting-game-hint {
     display: none;
-  }
-
-  .waiting-game-foot {
-    justify-content: flex-end;
   }
 }
 
