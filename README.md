@@ -9,52 +9,33 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Story Pages** — add illustrated pages with captions; each illustration uses the character sheet as a visual reference for consistency
 - **Keyboard-first navigation** — the story index sits down the left on a wide screen; `\` (or one `Tab`) reaches it, then `↑`/`↓` turn pages and land with the illustration fully in view (`Alt`+`↑`/`↓` while you type; hold either to go faster)
 - **Pictures fit the window** — an illustration is scaled down to what is left of the window under the navbar, never cropped, so the whole of it is on screen at once; a phone-width window keeps the full-width picture instead
-- **Something to do while it draws** — every generation puts a paint-catching game over the page for as long as the wait lasts, and takes it away the moment the picture lands
+- **Something to do while it draws** — a letter appears in the middle of the window for as long as the wait lasts; type it and it poofs, and another takes its place
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
 - **Netlify-ready** — deploys with `netlify.toml` included
 
-## The waiting game
+## The waiting letter
 
 A picture takes half a minute or more to come back, which is forever to the kid
-who asked for it. Rather than a spinner, the wait gets a game.
+who asked for it. So while it is being made, a letter appears in the middle of
+the window. Find it on the keyboard and it poofs in a burst of colour, and
+another one takes its place. It keeps a count of how many have been found, and
+the last one poofs away the moment the picture lands.
 
-**Paint Catcher** goes up over the page about half a second into any generation
-— a page illustration, a reference graphic, or the planning step that **🖼️
-Generate Illustration** runs first — and comes down when the picture lands.
-Steer the bucket with a finger, the mouse, or `←`/`→`; every drop caught is
-flung onto the paper behind the game, so a long wait leaves a painting of its
-own behind. Stars are worth five. Nothing can be lost — a missed drop just
-splashes on the floor — because the player is four and the point is to make
-ninety seconds feel like ten.
+It does not cover the page, which is the point: there is no panel and no dimmed
+backdrop, nothing on it takes a click except the ✕, and the story, the buttons
+and the picture arriving are all still there to be read, pressed and watched.
+On a phone, where there is no keyboard to type on, tapping the letter is the
+answer instead — and a finger dragged across it still scrolls the page.
 
-On a touch screen it plays differently, because a hand steering a bucket at the
-bottom edge is a hand covering the bucket: there the bucket is wider, rides well
-up from the bottom with a strip of glass left below it to drag a thumb in, and
-gives a little more time to reach each drop. The grown-up's controls move above
-the paper — keyed on the pointer, not the window's width, so a phone turned
-sideways gets the same treatment — and no drop is ever dealt into the strips
-down either side of the screen, where an Android swipe means Back and would
-walk out of the app with the picture still being made.
-
-When the picture is ready the game says so and bows out after seven seconds:
-**See my picture** goes straight there, **Keep playing** cancels the countdown.
-A wait that ends in a failure says so instead and closes, leaving the error
-message on the page underneath.
-
-For the grown-up holding the keyboard:
-
-- **Hide game** puts it away without stopping anything, and a small **🎮 Play
-  while you wait** button in the corner brings it back for the rest of that
-  wait. `Esc` does the same, and closes the game once the picture has landed.
-- **Open by itself**, the checkbox beside it, stops it opening on its own. That
-  choice is remembered; the corner button still offers the game every time.
-- It steps aside for anything that wants an answer — the plan review, a
-  confirmation, the trash — and comes back afterwards if the picture is still
-  on its way.
-
-Nothing about it touches a generation: the request is in flight the whole time,
-and closing, hiding or ignoring the game changes none of it.
+- **Wrong keys cost nothing.** The letter shakes its head and waits. Nothing is
+  ever taken away from the player, because the player is four.
+- **The grown-up's keyboard stays theirs.** With the caret in a caption or any
+  other text box the game stops listening entirely: a letter typed there is a
+  letter in the caption, never a guess.
+- **`Esc` or the ✕** puts it away until the next picture, and it stands aside on
+  its own for anything that wants an answer — the plan review, a confirmation,
+  the trash.
 
 ## The trash
 

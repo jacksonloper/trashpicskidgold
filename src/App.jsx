@@ -1120,65 +1120,34 @@ export default function App() {
   /* ---- something to do while a picture is made ---- */
 
   /**
-   * The wait the game is covering, or null when nothing is being made.
+   * Whether anything is being made right now.
    *
    * Reference art and page illustrations are the same wait to the kid sitting
-   * there, so both fill it. So does planning: "Generate Illustration" spends
-   * its first several seconds there before an image is ever requested, and a
-   * game that started only at the image would leave that part bare.
+   * there. So is planning: "Generate Illustration" spends its first several
+   * seconds there before an image is ever requested, and a wait that started
+   * only at the image would leave that part bare.
    */
-  const waitingJob = useMemo(() => {
-    const refId = Object.keys(generatingRefIds).find(
-      (id) => generatingRefIds[id]
-    );
-    if (refId) {
-      const rg = referenceGraphics.find((x) => x.id === refId);
-      return {
-        kind: "reference",
-        label: rg?.label?.trim() || "your reference art",
-      };
-    }
-
-    const drawing = Object.keys(generatingSections).find(
-      (id) => generatingSections[id]
-    );
-    const thinking = Object.keys(planningSections).find(
-      (id) => planningSections[id]
-    );
-    const id = drawing ?? thinking;
-    if (!id) return null;
-    const index = sections.findIndex((sec) => sec.id === id);
-    return {
-      kind: drawing ? "illustration" : "planning",
-      label: index === -1 ? null : sectionTitle(sections[index], index),
-    };
-  }, [
-    generatingRefIds,
-    generatingSections,
-    planningSections,
-    referenceGraphics,
-    sections,
-  ]);
+  const makingArt = useMemo(
+    () =>
+      Object.values(generatingRefIds).some(Boolean) ||
+      Object.values(generatingSections).some(Boolean) ||
+      Object.values(planningSections).some(Boolean),
+    [generatingRefIds, generatingSections, planningSections]
+  );
 
   const waitGame = useWaitingGame({
-    job: waitingJob,
-    // A dialog is a grown-up talking: the game steps aside for one and comes
+    active: makingArt,
+    // A dialog is a grown-up talking: the letter steps aside for one and comes
     // back afterwards if the picture is still on its way.
     suspended: !!illustrationPlan || !!confirm || trashOpen,
-    error,
-    planOpen: !!illustrationPlan,
   });
 
   // Off while a dialog owns the keyboard, so Escape-and-arrow habits inside
   // the plan or confirm dialogs don't move the story underneath them. The
-  // game wants the arrow keys for itself, too.
+  // waiting letter is not a dialog and doesn't take the page, so it doesn't
+  // take these either.
   useSectionShortcuts(
-    !!story &&
-      !illustrationPlan &&
-      !confirm &&
-      !trashOpen &&
-      !waitGame.visible &&
-      sections.length > 0,
+    !!story && !illustrationPlan && !confirm && !trashOpen && sections.length > 0,
     navigateSections
   );
 
@@ -1796,31 +1765,16 @@ export default function App() {
         </main>
       </div>
 
-      {/* Paint to catch while the model paints. Kept mounted while it is put
-          away, so the picture the player is making survives being hidden. */}
-      {waitGame.session && (
+      {/* A letter to find while the model draws. It floats over the page
+          rather than covering it: the story stays readable and usable, and
+          the picture can be watched as it lands. */}
+      {waitGame.on && (
         <WaitingGame
-          kind={waitGame.session.kind}
-          label={waitGame.session.label}
-          phase={waitGame.session.phase}
-          outcome={waitGame.session.outcome}
-          doneAt={waitGame.session.doneAt}
           visible={waitGame.visible}
-          autoOpen={waitGame.autoOpen}
-          onAutoOpenChange={waitGame.setAutoOpen}
+          leaving={waitGame.leaving}
           onHide={waitGame.hide}
           onClose={waitGame.close}
         />
-      )}
-
-      {waitGame.chip && (
-        <button
-          type="button"
-          className="waiting-game-chip"
-          onClick={waitGame.open}
-        >
-          🎮 Play while you wait
-        </button>
       )}
 
       {/* Illustration plan approval modal */}

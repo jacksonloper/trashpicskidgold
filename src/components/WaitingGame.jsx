@@ -1,303 +1,220 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPaintCatcher } from "../paintCatcher";
 
 /*
- * The overlay that goes up while a picture is being made.
+ * A letter to find while a picture is being made.
  *
- * Every generation is thirty to ninety seconds of a progress-free "Generating…"
- * button, which is a very long time to a five-year-old. This puts a game over
- * the page for exactly as long as the wait lasts, and gets out of the way the
- * moment the picture lands.
+ * A generation is half a minute or more of nothing happening, which is forever
+ * to the kid who asked for the picture. So a letter floats in the middle of the
+ * window: find it on the keyboard, it poofs, another one takes its place.
  *
- * It is not a modal: generation carries on underneath it, **Hide game** puts it
- * away without stopping anything, and the checkbox at the bottom stops it
- * opening by itself for grown-ups who would rather keep working.
+ * It deliberately does not cover the page. There is no panel, no dimmed
+ * backdrop and no pointer events anywhere except the little ✕ — the story, the
+ * buttons and the picture as it lands are all still there to be seen and used,
+ * and the grown-up's keyboard stays theirs the moment they put the caret in a
+ * text box.
  */
 
-/** How long the "your picture is ready" card waits before bowing out. */
-const DONE_COUNTDOWN = 7; // seconds
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-const CHEERS = [
-  "Nice catch!",
-  "Splat!",
-  "Lovely colour!",
-  "Keep going!",
-  "Ooh, pretty!",
+const COLORS = [
+  "#e5397c",
+  "#f2760c",
+  "#e0a800",
+  "#2fa84f",
+  "#1f8fe0",
+  "#8b5cf6",
 ];
 
-const STEER_KEYS = ["ArrowLeft", "ArrowRight", "a", "A", "d", "D"];
+/** How long a letter takes to vanish, and how long until the next one. */
+const POOF_MS = 420;
+const SPARKS = 12;
 
-/** What the top of the overlay says about the wait it is covering. */
-function statusLine(kind, label) {
-  if (kind === "planning") {
-    return label ? `Thinking up ${label}…` : "Thinking up your picture…";
+let nextId = 1;
+
+/** A letter, its colour and the burst it will go out in. */
+function drawLetter(previous) {
+  let char = previous;
+  while (char === previous) {
+    char = ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
   }
-  if (kind === "reference") {
-    return label ? `Drawing ${label}…` : "Drawing your reference art…";
-  }
-  return label ? `Painting ${label}…` : "Painting your picture…";
+  const sparks = Array.from({ length: SPARKS }, (unused, i) => {
+    const angle = (Math.PI * 2 * i) / SPARKS + Math.random() * 0.5;
+    const distance = 70 + Math.random() * 80;
+    return {
+      dx: `${Math.round(Math.cos(angle) * distance)}px`,
+      dy: `${Math.round(Math.sin(angle) * distance)}px`,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    };
+  });
+  return {
+    id: nextId++,
+    char,
+    color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    sparks,
+  };
 }
 
-export default function WaitingGame({
-  kind,
-  label,
-  phase,
-  outcome,
-  doneAt,
-  visible,
-  autoOpen,
-  onAutoOpenChange,
-  onHide,
-  onClose,
-}) {
-  const paperRef = useRef(null);
-  const spritesRef = useRef(null);
-  const gameRef = useRef(null);
-  const cheerTimer = useRef(null);
+/** Somewhere a letter key means a letter, not a guess. */
+function isTyping(el) {
+  if (!el) return false;
+  return (
+    el.isContentEditable ||
+    el.tagName === "INPUT" ||
+    el.tagName === "TEXTAREA" ||
+    el.tagName === "SELECT"
+  );
+}
+
+/** A letter on its way out: the glyph blowing up, and the burst behind it. */
+function Poof({ letter }) {
+  return (
+    <span className="waiting-letter-poof" aria-hidden="true">
+      <span className="waiting-letter-glyph is-poofing" style={{ color: letter.color }}>
+        {letter.char}
+      </span>
+      {letter.sparks.map((s, i) => (
+        <i
+          key={i}
+          style={{ "--dx": s.dx, "--dy": s.dy, background: s.color }}
+        />
+      ))}
+    </span>
+  );
+}
+
+export default function WaitingGame({ visible, leaving, onHide, onClose }) {
+  const [target, setTarget] = useState(() => drawLetter(null));
+  const [poof, setPoof] = useState(null);
+  const [found, setFound] = useState(0);
+  const [wrong, setWrong] = useState(false);
+  // No keyboard to type on, so the letter itself takes a tap instead.
+  const [tappable] = useState(
+    () => !!window.matchMedia?.("(pointer: coarse)").matches
+  );
+
+  const targetRef = useRef(target);
+  const timers = useRef([]);
   const closeRef = useRef(onClose);
+  const hideRef = useRef(onHide);
   useEffect(() => {
+    targetRef.current = target;
     closeRef.current = onClose;
+    hideRef.current = onHide;
   });
 
-  const [score, setScore] = useState(0);
-  const [cheer, setCheer] = useState(null);
-  // The ending the player waved away, stamped with the moment that wait
-  // finished — so the next wait's ending gets its own card rather than
-  // inheriting this one's dismissal.
-  const [keptFor, setKeptFor] = useState(0);
-  const [left, setLeft] = useState(DONE_COUNTDOWN);
-
-  const done = phase === "done";
-  const card = done && keptFor !== doneAt;
-
-  /* ---- the game itself ---- */
-
-  useEffect(() => {
-    const game = createPaintCatcher(
-      { paper: paperRef.current, sprites: spritesRef.current },
-      {
-        onEvent: (e) => {
-          if (e.type !== "catch") return;
-          setScore(e.score);
-
-          let message = null;
-          if (e.kind === "star") message = "⭐ Star! Five points!";
-          else if (e.combo === 5) message = "Five in a row!";
-          else if (e.combo === 10) message = "Ten in a row! Wow!";
-          else if (e.combo > 0 && e.combo % 25 === 0)
-            message = `${e.combo} in a row!!`;
-          else if (Math.random() < 0.12)
-            message = CHEERS[Math.floor(Math.random() * CHEERS.length)];
-          if (!message) return;
-
-          setCheer(message);
-          clearTimeout(cheerTimer.current);
-          cheerTimer.current = setTimeout(() => setCheer(null), 1600);
-        },
-      }
-    );
-    gameRef.current = game;
-    return () => {
-      clearTimeout(cheerTimer.current);
-      game.destroy();
-      gameRef.current = null;
-    };
+  const later = useCallback((fn, ms) => {
+    const id = setTimeout(fn, ms);
+    timers.current.push(id);
+    return id;
   }, []);
 
+  useEffect(
+    () => () => {
+      timers.current.forEach(clearTimeout);
+      timers.current = [];
+    },
+    []
+  );
+
+  const guess = useCallback(
+    (char) => {
+      const current = targetRef.current;
+      if (!current) return; // mid-poof: the letter is already gone
+
+      if (char !== current.char) {
+        // Wrong keys cost nothing. The letter just shakes its head.
+        setWrong(true);
+        later(() => setWrong(false), 420);
+        return;
+      }
+
+      targetRef.current = null; // a second press must not score twice
+      setTarget(null);
+      setWrong(false);
+      setPoof(current);
+      setFound((n) => n + 1);
+      later(() => {
+        const next = drawLetter(current.char);
+        targetRef.current = next;
+        setTarget(next);
+        setPoof(null);
+      }, POOF_MS);
+    },
+    [later]
+  );
+
   /*
-   * Running only while it is on screen, in a tab someone is looking at, and
-   * not behind the card that says the wait is over. Paused, it keeps every
-   * splat already on the paper — hiding the game is not losing the painting.
+   * The keyboard, borrowed rather than taken: nothing is prevented, and a
+   * letter typed into a caption is a letter in the caption.
    */
   useEffect(() => {
-    const game = gameRef.current;
-    if (!game) return undefined;
+    if (!visible || leaving) return undefined;
 
-    const sync = () => {
-      if (visible && !card && !document.hidden) game.resume();
-      else game.pause();
-    };
-    sync();
-    document.addEventListener("visibilitychange", sync);
-    return () => {
-      document.removeEventListener("visibilitychange", sync);
-      game.pause();
-    };
-  }, [visible, card]);
-
-  /* ---- steering ---- */
-
-  useEffect(() => {
-    if (!visible) return undefined;
-
-    const down = (e) => {
+    const onKeyDown = (e) => {
       if (e.altKey || e.ctrlKey || e.metaKey) return;
+      // Escape works even mid-caption — it is the way to make this go away.
       if (e.key === "Escape") {
-        e.preventDefault();
-        if (done) closeRef.current();
-        else onHide();
+        hideRef.current();
         return;
       }
-      const dir =
-        e.key === "ArrowLeft" || e.key === "a" || e.key === "A"
-          ? -1
-          : e.key === "ArrowRight" || e.key === "d" || e.key === "D"
-            ? 1
-            : 0;
-      if (!dir) return;
-      e.preventDefault();
-      gameRef.current?.setSteer(dir);
+      if (e.key.length !== 1 || isTyping(document.activeElement)) return;
+      const char = e.key.toUpperCase();
+      if (char >= "A" && char <= "Z") guess(char);
     };
 
-    const up = (e) => {
-      if (STEER_KEYS.includes(e.key)) gameRef.current?.setSteer(0);
-    };
-    const release = () => gameRef.current?.setSteer(0);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [guess, leaving, visible]);
 
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    window.addEventListener("blur", release);
-    return () => {
-      release();
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-      window.removeEventListener("blur", release);
-    };
-  }, [done, onHide, visible]);
-
-  const handlePointer = useCallback((e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    gameRef.current?.setPointer(e.clientX - rect.left);
-  }, []);
-
-  const handlePointerLeave = useCallback(() => {
-    gameRef.current?.clearPointer();
-  }, []);
-
-  /* ---- bowing out ---- */
-
-  /*
-   * Counted from when the card actually came on screen, not from when the
-   * wait ended: a dialog can hold the card back for a while, and a card that
-   * appears with two seconds left on it — or none — reads as a glitch.
-   */
+  // The picture has landed: wave the last letter off, then go.
   useEffect(() => {
-    if (!card || !visible) return undefined;
-    const shownAt = Date.now();
-    const tick = () => {
-      const remaining = DONE_COUNTDOWN - Math.round((Date.now() - shownAt) / 1000);
-      if (remaining <= 0) {
-        clearInterval(timer);
-        closeRef.current();
-        return;
-      }
-      setLeft(remaining);
-    };
-    const first = setTimeout(tick, 0);
-    const timer = setInterval(tick, 250);
-    return () => {
-      clearTimeout(first);
-      clearInterval(timer);
-    };
-  }, [card, doneAt, visible]);
-
-  const failed = outcome === "error";
+    if (!leaving) return undefined;
+    const id = setTimeout(() => closeRef.current(), POOF_MS + 60);
+    return () => clearTimeout(id);
+  }, [leaving]);
 
   return (
     <div
-      className={`waiting-game${visible ? "" : " is-away"}`}
-      role="dialog"
-      aria-label="Something to play while your picture is made"
+      className={`waiting-letter${visible ? "" : " is-away"}`}
       aria-hidden={!visible}
     >
-      <div className="waiting-game-panel">
-        <div className="waiting-game-bar">
-          <span className="waiting-game-status">
-            {done ? (
-              failed ? (
-                "That one didn't work"
-              ) : (
-                "Finished!"
-              )
-            ) : (
-              <>
-                {statusLine(kind, label)}
-                <span className="waiting-game-dots" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              </>
-            )}
-          </span>
-          <span className="waiting-game-score">
-            {cheer && <em className="waiting-game-cheer">{cheer}</em>}
-            <strong>🎨 {score}</strong>
-          </span>
-        </div>
+      <div className="waiting-letter-stack">
+        {poof && <Poof key={`poof-${poof.id}`} letter={poof} />}
 
-        <div
-          className="waiting-game-stage"
-          onPointerMove={handlePointer}
-          onPointerDown={handlePointer}
-          onPointerLeave={handlePointerLeave}
-        >
-          {/* The paper keeps the painting; the sprites move over it. */}
-          <canvas ref={paperRef} className="waiting-game-canvas" />
-          <canvas ref={spritesRef} className="waiting-game-canvas" />
-
-          {card && (
-            <div className="waiting-game-card">
-              <h2>
-                {failed ? "😕 No picture this time" : "✨ Your picture is ready!"}
-              </h2>
-              <p>
-                {failed
-                  ? "There is a message about it back on the page."
-                  : `You caught ${score} ${
-                      score === 1 ? "splat" : "splats"
-                    } while it was being painted.`}
-              </p>
-              <div className="waiting-game-card-buttons">
-                <button type="button" className="btn-primary" onClick={onClose}>
-                  {failed ? "Back to the story" : "See my picture"} ({left})
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setKeptFor(doneAt)}
-                >
-                  Keep playing
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="waiting-game-foot">
-          <span className="waiting-game-hint">
-            Catch the paint! Drag it about, or steer with ← →. Every drop you
-            catch lands on the paper.
-          </span>
-          <span className="waiting-game-foot-actions">
-            <label className="waiting-game-auto">
-              <input
-                type="checkbox"
-                checked={autoOpen}
-                onChange={(e) => onAutoOpenChange(e.target.checked)}
-              />
-              Open by itself
-            </label>
-            <button
-              type="button"
-              className="btn-small"
-              onClick={done ? onClose : onHide}
+        {target &&
+          (leaving ? (
+            <Poof key={`bye-${target.id}`} letter={target} />
+          ) : (
+            <span
+              key={target.id}
+              className={`waiting-letter-glyph${wrong ? " is-wrong" : ""}${
+                tappable ? " is-tappable" : ""
+              }`}
+              style={{ color: target.color }}
+              role="img"
+              aria-label={`Find the letter ${target.char}`}
+              onClick={tappable ? () => guess(target.char) : undefined}
             >
-              {done ? "Close" : "Hide game"}
-            </button>
-          </span>
-        </div>
+              {target.char}
+            </span>
+          ))}
       </div>
+
+      {!leaving && (
+        <p className="waiting-letter-pill">
+          <span>{tappable ? "Tap the letter!" : "Type the letter!"}</span>
+          {found > 0 && <strong>⭐ {found}</strong>}
+          <button
+            type="button"
+            className="waiting-letter-hide"
+            onClick={onHide}
+            title="Hide this until the next picture (Esc)"
+            aria-label="Hide the letter game"
+          >
+            ✕
+          </button>
+        </p>
+      )}
     </div>
   );
 }

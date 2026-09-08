@@ -27,6 +27,32 @@
   gap: 0.5rem;
 }
 
+/*
+ * A phone is narrower than this row of buttons is long, and a flex row that
+ * cannot wrap does not overflow quietly: the page grows to fit it, the browser
+ * widens the layout viewport to match, and every fixed and centred thing on the
+ * page is laid out against a window twice as wide as the screen — half of the
+ * app off to the right, and a horizontal scrollbar to go and find it. So it
+ * wraps.
+ */
+@media (max-width: 48rem) {
+  .navbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .navbar-stories {
+    flex-wrap: wrap;
+    row-gap: 0.4rem;
+  }
+
+  .story-select {
+    max-width: 100%;
+    min-width: 0;
+  }
+}
+
 .story-select {
   padding: 0.35rem 0.6rem;
   border: 1px solid #ccc;
@@ -537,6 +563,7 @@
 
 .ref-graphic-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
@@ -552,7 +579,10 @@
 }
 
 .ref-graphic-label {
-  flex: 1;
+  /* `flex: 1` alone still refuses to go below the text box's own minimum
+     width, which on a phone is wider than the phone. */
+  flex: 1 1 8rem;
+  min-width: 0;
   padding: 0.5rem 0.75rem;
   border: 1px solid #ccc;
   border-radius: 6px;
@@ -1117,124 +1147,69 @@
   border-color: #3367d6;
 }
 
-
-/* ---- Waiting game ---- */
+/* ---- Waiting letter ---- */
 
 /*
- * Under the dialogs (9998–9999) and over everything else: a picture being made
- * is not a question anyone has to answer, so a confirm or the plan modal still
- * comes out on top of the game.
+ * The letter to find while a picture is being made.
+ *
+ * It floats in the middle of the window and covers nothing: no panel, no dimmed
+ * backdrop, and `pointer-events: none` on everything except the ✕ (and the
+ * glyph itself on a touch screen, where a tap is the only way to answer). The
+ * page carries on being a page underneath — including the picture arriving,
+ * which is the whole thing being waited for. Under the dialogs, which do want
+ * the screen to themselves.
  */
-.waiting-game {
+.waiting-letter {
   position: fixed;
   inset: 0;
   z-index: 9400;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
-  background: rgba(22, 18, 34, 0.6);
-  backdrop-filter: blur(4px);
-  /* Nothing in here scrolls, and a phone that thinks otherwise turns a drag
-     across the paper into a pull-to-refresh that throws the generation away. */
-  overscroll-behavior: none;
-  touch-action: none;
+  gap: 0.75rem;
+  pointer-events: none;
 }
 
-/* Put away, not unmounted: the paper keeps every splat already on it. */
-.waiting-game.is-away {
+.waiting-letter.is-away {
   display: none;
 }
 
-.waiting-game-panel {
-  display: flex;
-  flex-direction: column;
-  width: min(100%, 900px);
-  height: min(100%, 620px);
-  overflow: hidden;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+.waiting-letter-stack {
+  position: relative;
+  display: grid;
+  place-items: center;
 }
 
-.waiting-game-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.6rem 1rem;
-  border-bottom: 1px solid #eee;
-  font-weight: 600;
+/*
+ * Big, and legible against whatever the page happens to be showing behind it —
+ * a pale illustration, a dark one, or text. A white outline does that work,
+ * painted behind the fill rather than over it so the letter keeps its shape,
+ * with a soft shadow to lift it off the page.
+ */
+.waiting-letter-glyph {
+  grid-area: 1 / 1;
+  font-size: clamp(5rem, 22vmin, 11rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  user-select: none;
+  -webkit-text-stroke: 10px #fff;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28));
+  animation: waiting-letter-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.waiting-game-status {
-  display: flex;
-  align-items: baseline;
-  gap: 0.15rem;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+/* On a phone there is no keyboard, so the glyph itself is the answer. */
+.waiting-letter-glyph.is-tappable {
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
-.waiting-game-dots {
-  display: inline-flex;
-  gap: 3px;
-  padding-left: 2px;
-}
-
-.waiting-game-dots i {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #4285f4;
-  animation: waiting-game-dot 1.1s infinite ease-in-out;
-}
-
-.waiting-game-dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.waiting-game-dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-@keyframes waiting-game-dot {
-  0%,
-  60%,
-  100% {
-    opacity: 0.25;
-  }
-  30% {
-    opacity: 1;
-  }
-}
-
-.waiting-game-score {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  white-space: nowrap;
-}
-
-.waiting-game-score strong {
-  font-size: 1.15rem;
-}
-
-.waiting-game-cheer {
-  font-style: normal;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #7a4b00;
-  background: #fff3cd;
-  border-radius: 999px;
-  padding: 0.15rem 0.6rem;
-  animation: waiting-game-pop 0.25s ease-out;
-}
-
-@keyframes waiting-game-pop {
+@keyframes waiting-letter-in {
   from {
-    transform: scale(0.7);
+    transform: scale(0.4);
     opacity: 0;
   }
   to {
@@ -1243,186 +1218,125 @@
   }
 }
 
-/* The paper. `touch-action` matters: a finger dragging the bucket must not
-   also be scrolling the page behind the overlay, and a finger held still on it
-   must not raise a text selection or a callout either. */
-.waiting-game-stage {
+/* A wrong key costs nothing — the letter just shakes its head. */
+.waiting-letter-glyph.is-wrong {
+  animation: waiting-letter-wrong 0.4s ease-in-out;
+}
+
+@keyframes waiting-letter-wrong {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  20% {
+    transform: translateX(-10px) rotate(-4deg);
+  }
+  45% {
+    transform: translateX(9px) rotate(3deg);
+  }
+  70% {
+    transform: translateX(-5px) rotate(-2deg);
+  }
+}
+
+/* ---- the poof ---- */
+
+.waiting-letter-poof {
+  grid-area: 1 / 1;
   position: relative;
-  flex: 1;
-  min-height: 0;
-  background: #fffdf6;
-  background-image: radial-gradient(#efe7d2 1px, transparent 1px);
-  background-size: 22px 22px;
-  touch-action: none;
-  cursor: crosshair;
-  overscroll-behavior: contain;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
+  display: grid;
+  place-items: center;
 }
 
-/* Two of them, stacked: the painting underneath, the moving pieces on top. */
-.waiting-game-canvas {
+.waiting-letter-glyph.is-poofing {
+  animation: waiting-letter-out 0.42s ease-out forwards;
+}
+
+@keyframes waiting-letter-out {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+.waiting-letter-poof i {
   position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  opacity: 0;
+  animation: waiting-letter-spark 0.42s ease-out forwards;
 }
 
-.waiting-game-card {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(90%, 420px);
-  padding: 1.25rem 1.5rem;
-  text-align: center;
-  background: #fff;
-  border-radius: 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  animation: waiting-game-pop 0.2s ease-out;
+@keyframes waiting-letter-spark {
+  0% {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(0.1);
+    opacity: 0;
+  }
 }
 
-.waiting-game-card h2 {
-  margin: 0 0 0.4rem;
-  font-size: 1.3rem;
-}
+/* ---- the little line under it ---- */
 
-.waiting-game-card p {
-  margin: 0 0 1rem;
-  color: #555;
-}
-
-.waiting-game-card-buttons {
+.waiting-letter-pill {
   display: flex;
+  align-items: center;
   gap: 0.6rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.waiting-game-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.55rem 1rem;
-  border-top: 1px solid #eee;
+  margin: 0;
+  padding: 0.3rem 0.4rem 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.16);
   font-size: 0.85rem;
-  color: #666;
-}
-
-.waiting-game-hint {
-  min-width: 0;
-}
-
-.waiting-game-foot-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  color: #555;
   white-space: nowrap;
 }
 
-.waiting-game-auto {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  cursor: pointer;
+.waiting-letter-pill strong {
+  color: #333;
 }
 
-/* Offered in the corner once the game has been hidden, for as long as the
-   wait it belongs to lasts. Out of the undo toast's way, which sits centred. */
-.waiting-game-chip {
-  position: fixed;
-  left: 1rem;
-  bottom: 1.5rem;
-  z-index: 9300;
-  padding: 0.55rem 0.9rem;
+.waiting-letter-hide {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
   border: none;
-  border-radius: 999px;
-  background: #4285f4;
-  color: #fff;
-  font-size: 0.9rem;
+  border-radius: 50%;
+  background: #eee;
+  color: #666;
+  font-size: 0.8rem;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 
-.waiting-game-chip:hover {
-  background: #3367d6;
+.waiting-letter-hide:hover {
+  background: #ddd;
+  color: #333;
 }
 
-/*
- * Anything played with fingers, however wide the window: the grown-up's
- * controls move above the paper. At the bottom they sit exactly where a thumb
- * rests, and "Hide game" is not something to hit by accident mid-drag. Keyed
- * on the pointer rather than on width, because a phone turned sideways is a
- * wide window that is still all thumbs.
- */
-@media (pointer: coarse) {
-  .waiting-game-bar {
-    order: 1;
-  }
-
-  .waiting-game-foot {
-    order: 2;
-    justify-content: flex-end;
-    padding: 0.4rem 0.75rem;
-    font-size: 0.8rem;
-    border-top: none;
-    border-bottom: 1px solid #eee;
-  }
-
-  .waiting-game-stage {
-    order: 3;
-  }
-}
-
-/*
- * A phone, either way up: the whole window, and no hint — which the first ten
- * seconds of playing explain better anyway. `dvh` because a fixed overlay and a
- * browser's disappearing address bar (at the bottom of the screen, in Samsung
- * Internet) disagree about how tall the window is.
- */
-@media (max-width: 34rem), (pointer: coarse) and (max-height: 34rem) {
-  .waiting-game {
-    padding: 0;
-    height: 100dvh;
-    /* The panel covers the whole screen here, so the blur behind it renders
-       nothing anyone can see — and a full-screen backdrop filter is one of the
-       most expensive things you can ask a phone GPU for, every frame. */
-    backdrop-filter: none;
-  }
-
-  .waiting-game-panel {
-    width: 100%;
-    height: 100%;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
-  .waiting-game-hint {
-    display: none;
-  }
-}
-
-/* Sideways on a phone there are only a few hundred pixels of height to share
-   out, and two rows of chrome must not eat a quarter of them. */
-@media (pointer: coarse) and (max-height: 34rem) {
-  .waiting-game-bar {
-    padding: 0.3rem 0.75rem;
-    font-size: 0.9rem;
-  }
-
-  .waiting-game-foot {
-    padding: 0.2rem 0.75rem;
-  }
-}
-
+/* Somebody who does not want things flying about still gets the game; the
+   letter simply changes rather than leaping and bursting. */
 @media (prefers-reduced-motion: reduce) {
-  .waiting-game-dots i,
-  .waiting-game-cheer,
-  .waiting-game-card {
+  .waiting-letter-glyph,
+  .waiting-letter-glyph.is-wrong,
+  .waiting-letter-glyph.is-poofing {
     animation: none;
+  }
+
+  .waiting-letter-glyph.is-poofing {
+    opacity: 0;
+  }
+
+  .waiting-letter-poof i {
+    display: none;
   }
 }
