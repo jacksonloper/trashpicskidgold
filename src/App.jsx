@@ -13,6 +13,7 @@ import ExportButtons from "./components/ExportButtons";
 import ConfirmDialog from "./components/ConfirmDialog";
 import UndoToast from "./components/UndoToast";
 import TrashBin from "./components/TrashBin";
+import WaitingGame from "./components/WaitingGame";
 import {
   buildRefGraphicPrompt,
   planIllustration,
@@ -44,6 +45,7 @@ import {
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
 import useSectionShortcuts from "./useSectionShortcuts";
+import useWaitingGame from "./useWaitingGame";
 import scrollIntoViewFully from "./scrollIntoViewFully";
 import {
   readStoryBundle,
@@ -1115,8 +1117,35 @@ export default function App() {
     [navigateSections]
   );
 
+  /* ---- something to do while a picture is made ---- */
+
+  /**
+   * Whether anything is being made right now.
+   *
+   * Reference art and page illustrations are the same wait to the kid sitting
+   * there. So is planning: "Generate Illustration" spends its first several
+   * seconds there before an image is ever requested, and a wait that started
+   * only at the image would leave that part bare.
+   */
+  const makingArt = useMemo(
+    () =>
+      Object.values(generatingRefIds).some(Boolean) ||
+      Object.values(generatingSections).some(Boolean) ||
+      Object.values(planningSections).some(Boolean),
+    [generatingRefIds, generatingSections, planningSections]
+  );
+
+  const waitGame = useWaitingGame({
+    active: makingArt,
+    // A dialog is a grown-up talking: the letter steps aside for one and comes
+    // back afterwards if the picture is still on its way.
+    suspended: !!illustrationPlan || !!confirm || trashOpen,
+  });
+
   // Off while a dialog owns the keyboard, so Escape-and-arrow habits inside
-  // the plan or confirm dialogs don't move the story underneath them.
+  // the plan or confirm dialogs don't move the story underneath them. The
+  // waiting letter is not a dialog and doesn't take the page, so it doesn't
+  // take these either.
   useSectionShortcuts(
     !!story && !illustrationPlan && !confirm && !trashOpen && sections.length > 0,
     navigateSections
@@ -1735,6 +1764,18 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* A letter to find while the model draws. It floats over the page
+          rather than covering it: the story stays readable and usable, and
+          the picture can be watched as it lands. */}
+      {waitGame.on && (
+        <WaitingGame
+          visible={waitGame.visible}
+          leaving={waitGame.leaving}
+          onHide={waitGame.hide}
+          onClose={waitGame.close}
+        />
+      )}
 
       {/* Illustration plan approval modal */}
       {illustrationPlan && (

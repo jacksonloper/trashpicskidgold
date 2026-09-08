@@ -9,9 +9,33 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Story Pages** — add illustrated pages with captions; each illustration uses the character sheet as a visual reference for consistency
 - **Keyboard-first navigation** — the story index sits down the left on a wide screen; `\` (or one `Tab`) reaches it, then `↑`/`↓` turn pages and land with the illustration fully in view (`Alt`+`↑`/`↓` while you type; hold either to go faster)
 - **Pictures fit the window** — an illustration is scaled down to what is left of the window under the navbar, never cropped, so the whole of it is on screen at once; a phone-width window keeps the full-width picture instead
+- **Something to do while it draws** — a letter appears in the middle of the window for as long as the wait lasts; type it and it poofs, and another takes its place
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
 - **Netlify-ready** — deploys with `netlify.toml` included
+
+## The waiting letter
+
+A picture takes half a minute or more to come back, which is forever to the kid
+who asked for it. So while it is being made, a letter appears in the middle of
+the window. Find it on the keyboard and it poofs in a burst of colour, and
+another one takes its place. It keeps a count of how many have been found, and
+the last one poofs away the moment the picture lands.
+
+It does not cover the page, which is the point: there is no panel and no dimmed
+backdrop, nothing on it takes a click except the ✕, and the story, the buttons
+and the picture arriving are all still there to be read, pressed and watched.
+On a phone, where there is no keyboard to type on, tapping the letter is the
+answer instead — and a finger dragged across it still scrolls the page.
+
+- **Wrong keys cost nothing.** The letter shakes its head and waits. Nothing is
+  ever taken away from the player, because the player is four.
+- **The grown-up's keyboard stays theirs.** With the caret in a caption or any
+  other text box the game stops listening entirely: a letter typed there is a
+  letter in the caption, never a guess.
+- **`Esc` or the ✕** puts it away until the next picture, and it stands aside on
+  its own for anything that wants an answer — the plan review, a confirmation,
+  the trash.
 
 ## The trash
 

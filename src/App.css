@@ -27,6 +27,32 @@
   gap: 0.5rem;
 }
 
+/*
+ * A phone is narrower than this row of buttons is long, and a flex row that
+ * cannot wrap does not overflow quietly: the page grows to fit it, the browser
+ * widens the layout viewport to match, and every fixed and centred thing on the
+ * page is laid out against a window twice as wide as the screen — half of the
+ * app off to the right, and a horizontal scrollbar to go and find it. So it
+ * wraps.
+ */
+@media (max-width: 48rem) {
+  .navbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .navbar-stories {
+    flex-wrap: wrap;
+    row-gap: 0.4rem;
+  }
+
+  .story-select {
+    max-width: 100%;
+    min-width: 0;
+  }
+}
+
 .story-select {
   padding: 0.35rem 0.6rem;
   border: 1px solid #ccc;
@@ -537,6 +563,7 @@
 
 .ref-graphic-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
@@ -552,7 +579,10 @@
 }
 
 .ref-graphic-label {
-  flex: 1;
+  /* `flex: 1` alone still refuses to go below the text box's own minimum
+     width, which on a phone is wider than the phone. */
+  flex: 1 1 8rem;
+  min-width: 0;
   padding: 0.5rem 0.75rem;
   border: 1px solid #ccc;
   border-radius: 6px;
@@ -1117,3 +1147,196 @@
   border-color: #3367d6;
 }
 
+/* ---- Waiting letter ---- */
+
+/*
+ * The letter to find while a picture is being made.
+ *
+ * It floats in the middle of the window and covers nothing: no panel, no dimmed
+ * backdrop, and `pointer-events: none` on everything except the ✕ (and the
+ * glyph itself on a touch screen, where a tap is the only way to answer). The
+ * page carries on being a page underneath — including the picture arriving,
+ * which is the whole thing being waited for. Under the dialogs, which do want
+ * the screen to themselves.
+ */
+.waiting-letter {
+  position: fixed;
+  inset: 0;
+  z-index: 9400;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  pointer-events: none;
+}
+
+.waiting-letter.is-away {
+  display: none;
+}
+
+.waiting-letter-stack {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/*
+ * Big, and legible against whatever the page happens to be showing behind it —
+ * a pale illustration, a dark one, or text. A white outline does that work,
+ * painted behind the fill rather than over it so the letter keeps its shape,
+ * with a soft shadow to lift it off the page.
+ */
+.waiting-letter-glyph {
+  grid-area: 1 / 1;
+  font-size: clamp(5rem, 22vmin, 11rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  user-select: none;
+  -webkit-text-stroke: 10px #fff;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28));
+  animation: waiting-letter-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* On a phone there is no keyboard, so the glyph itself is the answer. */
+.waiting-letter-glyph.is-tappable {
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+@keyframes waiting-letter-in {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* A wrong key costs nothing — the letter just shakes its head. */
+.waiting-letter-glyph.is-wrong {
+  animation: waiting-letter-wrong 0.4s ease-in-out;
+}
+
+@keyframes waiting-letter-wrong {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  20% {
+    transform: translateX(-10px) rotate(-4deg);
+  }
+  45% {
+    transform: translateX(9px) rotate(3deg);
+  }
+  70% {
+    transform: translateX(-5px) rotate(-2deg);
+  }
+}
+
+/* ---- the poof ---- */
+
+.waiting-letter-poof {
+  grid-area: 1 / 1;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.waiting-letter-glyph.is-poofing {
+  animation: waiting-letter-out 0.42s ease-out forwards;
+}
+
+@keyframes waiting-letter-out {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+.waiting-letter-poof i {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  opacity: 0;
+  animation: waiting-letter-spark 0.42s ease-out forwards;
+}
+
+@keyframes waiting-letter-spark {
+  0% {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(0.1);
+    opacity: 0;
+  }
+}
+
+/* ---- the little line under it ---- */
+
+.waiting-letter-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.3rem 0.4rem 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.16);
+  font-size: 0.85rem;
+  color: #555;
+  white-space: nowrap;
+}
+
+.waiting-letter-pill strong {
+  color: #333;
+}
+
+.waiting-letter-hide {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #eee;
+  color: #666;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.waiting-letter-hide:hover {
+  background: #ddd;
+  color: #333;
+}
+
+/* Somebody who does not want things flying about still gets the game; the
+   letter simply changes rather than leaping and bursting. */
+@media (prefers-reduced-motion: reduce) {
+  .waiting-letter-glyph,
+  .waiting-letter-glyph.is-wrong,
+  .waiting-letter-glyph.is-poofing {
+    animation: none;
+  }
+
+  .waiting-letter-glyph.is-poofing {
+    opacity: 0;
+  }
+
+  .waiting-letter-poof i {
+    display: none;
+  }
+}
