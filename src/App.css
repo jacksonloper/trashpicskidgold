@@ -522,9 +522,16 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  max-width: 600px;
+  max-width: min(600px, calc(100vw - 2rem));
+  box-sizing: border-box;
   z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* The message gives way, the buttons don't: a failure that offers "What
+   happened?" as well as "Dismiss" must not squeeze either into two lines. */
+.error-banner .btn-small {
+  flex-shrink: 0;
 }
 
 /* Mirrors the error banner but reads as good news, and sits above it so a
@@ -1338,5 +1345,105 @@
 
   .waiting-letter-poof i {
     display: none;
+  }
+}
+
+/* ---- What happened: the reply behind a one-line failure ---- */
+
+.error-details-modal {
+  max-width: 560px;
+}
+
+.error-details-what {
+  margin: 0.5rem 0 1rem;
+  line-height: 1.5;
+}
+
+/* Label and value on one row each, so the reason a picture didn't arrive can
+   be found by running an eye down the left. */
+.error-details-facts {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: #f7f7f7;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.error-details-facts > div {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
+}
+
+.error-details-facts dt {
+  flex: 0 0 9.5rem;
+  color: #666;
+}
+
+.error-details-facts dd {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.error-details-said {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-left: 3px solid #ccc;
+  background: #fafafa;
+  color: #333;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.error-details-try {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.5;
+}
+
+.error-details-try li {
+  margin: 0.3rem 0;
+}
+
+/* Folded away by default: it is there for the afternoon when nothing else in
+   the dialog explains it, not for every failure. */
+.error-details-raw {
+  margin-top: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.error-details-raw summary {
+  cursor: pointer;
+  color: #555;
+}
+
+.error-details-raw pre {
+  margin: 0.6rem 0 0;
+  padding: 0.75rem;
+  max-height: 16rem;
+  overflow: auto;
+  background: #1e1e1e;
+  color: #e8e8e8;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .error-details-facts > div {
+    display: block;
+  }
+
+  .error-details-facts dt {
+    color: #666;
   }
 }

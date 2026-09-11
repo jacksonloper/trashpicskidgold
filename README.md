@@ -10,6 +10,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Keyboard-first navigation** — the story index sits down the left on a wide screen; `\` (or one `Tab`) reaches it, then `↑`/`↓` turn pages and land with the illustration fully in view (`Alt`+`↑`/`↓` while you type; hold either to go faster)
 - **Pictures fit the window** — an illustration is scaled down to what is left of the window under the navbar, never cropped, so the whole of it is on screen at once; a phone-width window keeps the full-width picture instead
 - **Something to do while it draws** — a letter appears in the middle of the window for as long as the wait lasts; type it and it poofs, and another takes its place
+- **Failures that explain themselves** — when a picture doesn't arrive, the red banner says what happened in one line and **What happened?** opens the reply behind it: which filter stopped it, what Gemini wrote instead, what to try
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
 - **Netlify-ready** — deploys with `netlify.toml` included
@@ -36,6 +37,36 @@ answer instead — and a finger dragged across it still scrolls the page.
 - **`Esc` or the ✕** puts it away until the next picture, and it stands aside on
   its own for anything that wants an answer — the plan review, a confirmation,
   the trash.
+
+## When a picture doesn't arrive
+
+Half the time a generation fails, Gemini has already said exactly why — and
+none of it used to reach the screen. A refused prompt, a model that ran out of
+room, a picture that was drawn and then held back, and a key that has run out of
+quota all arrived as one flat line at the bottom of the window, and the times
+they didn't, they arrived as three hundred characters of raw JSON across it.
+
+Now the banner keeps one readable line and **What happened?** opens the rest:
+
+- **What happened**, in a sentence — "Gemini drew something and then its safety
+  filter held the picture back", not `finishReason: IMAGE_SAFETY`.
+- **The facts**: the model, the finish reason, the request block reason, any
+  safety category that was actually flagged, the tokens spent.
+- **What Gemini wrote instead**, when it answered in words. A refusal usually
+  arrives as a polite paragraph where the picture should have been, and it
+  generally names the problem.
+- **What to try** — reword the caption, switch models, wait a minute, check the
+  key — chosen for the failure that actually happened rather than listed in
+  general.
+- **The whole reply**, folded away, with the base64 taken out so it can be read,
+  and a button that copies it.
+
+Nothing here can change a story: the dialog is safe to open mid-generation, the
+waiting letter stands aside for it like any other dialog, and `Esc` closes it.
+
+The detail rides along on the error itself (`GeminiError` in `src/gemini.js`),
+so a failure that has nothing more to say simply doesn't offer the button — a
+file that wouldn't open is already its own explanation.
 
 ## The trash
 

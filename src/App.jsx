@@ -14,6 +14,7 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import UndoToast from "./components/UndoToast";
 import TrashBin from "./components/TrashBin";
 import WaitingGame from "./components/WaitingGame";
+import ErrorDetailsModal from "./components/ErrorDetailsModal";
 import {
   buildRefGraphicPrompt,
   planIllustration,
@@ -206,6 +207,27 @@ function confirmProps(pending) {
   };
 }
 
+/**
+ * What the error banner holds: a line to read, and the detail behind it.
+ *
+ * Most failures here are their own explanation — a file that wouldn't open,
+ * a picture that is no longer in the trash — and bring no detail at all. A
+ * failure from Gemini is the other kind: the line is all that fits on the
+ * banner and the reply behind it is what actually says what went wrong, so it
+ * travels on the error (see GeminiError) and the banner offers it behind a
+ * click rather than dropping it.
+ *
+ * @param {Error|string} e – what went wrong
+ * @param {string} [prefix] – said before it, e.g. "Could not open the trash: "
+ */
+function asSnack(e, prefix = "") {
+  if (typeof e === "string") return { message: prefix + e, details: null };
+  return {
+    message: prefix + (e?.message ?? "Something went wrong."),
+    details: e?.details ?? null,
+  };
+}
+
 export default function App() {
   /* ---- top-level state ---- */
   const [apiKey, setApiKey] = useState("");
@@ -219,7 +241,8 @@ export default function App() {
   const [generatingSections, setGeneratingSections] = useState({});
   const [planningSections, setPlanningSections] = useState({});
   const [illustrationPlan, setIllustrationPlan] = useState(null); // { sectionId, prompt, referenceImageIds }
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null); // { message, details } | null
+  const [errorDetailsOpen, setErrorDetailsOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -481,7 +504,7 @@ export default function App() {
       setTrashItems(items);
       setTrashCount(items.length);
     } catch (err) {
-      setError("Could not open the trash: " + err.message);
+      setError(asSnack(err, "Could not open the trash: "));
     } finally {
       setTrashLoading(false);
     }
@@ -585,7 +608,7 @@ export default function App() {
       setStoryList((prev) => [...prev, { id: storyId, title: newStory.title }]);
       setActiveStoryId(storyId);
     } catch (err) {
-      setError("Failed to load example story: " + err.message);
+      setError(asSnack(err, "Failed to load example story: "));
     } finally {
       setLoadingExample(false);
     }
@@ -645,10 +668,10 @@ export default function App() {
           setImportNote(bits.join(" — ") + ".");
         }
         if (failures.length > 0) {
-          setError(`Could not import: ${failures.join("; ")}`);
+          setError(asSnack(`Could not import: ${failures.join("; ")}`));
         }
       } catch (err) {
-        setError("Import failed: " + err.message);
+        setError(asSnack(err, "Import failed: "));
       } finally {
         setImporting(false);
       }
@@ -663,7 +686,7 @@ export default function App() {
       await persistApiKey(apiKey);
       setApiKeySaved(true);
     } catch (e) {
-      setError("Failed to save API key: " + e.message);
+      setError(asSnack(e, "Failed to save API key: "));
     }
   }, [apiKey]);
 
@@ -813,7 +836,7 @@ export default function App() {
         }));
         await trashPicture(replaced, "replaced", story.title);
       } catch (err) {
-        setError(err.message);
+        setError(asSnack(err));
       } finally {
         setGeneratingRefIds((prev) => ({ ...prev, [rgId]: false }));
       }
@@ -847,7 +870,7 @@ export default function App() {
         }));
         await trashPicture(replaced, "replaced", story.title);
       } catch (err) {
-        setError(err.message);
+        setError(asSnack(err));
       }
     },
     [referenceGraphics, story, trashPicture, updateStory]
@@ -1075,7 +1098,7 @@ export default function App() {
         updateSectionField(sectionId, "imageId", imgId);
         await trashPicture(sec.imageId, "replaced", story.title);
       } catch (err) {
-        setError("Could not put that picture on the page: " + err.message);
+        setError(asSnack(err, "Could not put that picture on the page: "));
       }
     },
     [sections, story, trashPicture, updateSectionField]
@@ -1135,11 +1158,19 @@ export default function App() {
     [generatingRefIds, generatingSections, planningSections]
   );
 
+  /*
+   * The detail dialog belongs to the failure that is on the banner. Dismiss
+   * that failure, or hit a different one, and a dialog left open would be
+   * explaining something that is no longer on screen.
+   */
+  useEffect(() => setErrorDetailsOpen(false), [error]);
+
   const waitGame = useWaitingGame({
     active: makingArt,
     // A dialog is a grown-up talking: the letter steps aside for one and comes
     // back afterwards if the picture is still on its way.
-    suspended: !!illustrationPlan || !!confirm || trashOpen,
+    suspended:
+      !!illustrationPlan || !!confirm || trashOpen || errorDetailsOpen,
   });
 
   // Off while a dialog owns the keyboard, so Escape-and-arrow habits inside
@@ -1175,7 +1206,7 @@ export default function App() {
           caption: sec.caption || entry.caption || "",
         });
         if (!picture) {
-          setError("That picture is no longer in the trash.");
+          setError(asSnack("That picture is no longer in the trash."));
           return;
         }
         setAllImages((prev) => ({ ...prev, [picture.id]: picture.data }));
@@ -1186,7 +1217,7 @@ export default function App() {
         setTrashPickSectionId(null);
         requestReveal(sectionId);
       } catch (err) {
-        setError("Could not take that picture out of the trash: " + err.message);
+        setError(asSnack(err, "Could not take that picture out of the trash: "));
       } finally {
         setTrashBusyId(null);
         await loadTrash();
@@ -1211,7 +1242,7 @@ export default function App() {
       try {
         await deleteTrashedImage(imageId);
       } catch (err) {
-        setError("Could not empty that out of the trash: " + err.message);
+        setError(asSnack(err, "Could not empty that out of the trash: "));
       } finally {
         setTrashBusyId(null);
         await loadTrash();
@@ -1228,7 +1259,7 @@ export default function App() {
       // longer exists; the panel would come back bare. Close the offer.
       setUndo(null);
     } catch (err) {
-      setError("Could not empty the trash: " + err.message);
+      setError(asSnack(err, "Could not empty the trash: "));
     } finally {
       await loadTrash();
     }
@@ -1363,7 +1394,7 @@ export default function App() {
         ]);
         return plan;
       } catch (err) {
-        setError(err.message);
+        setError(asSnack(err));
         return null;
       } finally {
         setPlanningSections((prev) => ({ ...prev, [sectionId]: false }));
@@ -1432,7 +1463,7 @@ export default function App() {
         await trashPicture(previous?.imageId, "replaced", story.title);
         return { ok: true, error: null };
       } catch (err) {
-        setError(err.message);
+        setError(asSnack(err));
         return { ok: false, error: err.message };
       } finally {
         setGeneratingSections((prev) => ({ ...prev, [sectionId]: false }));
@@ -1752,7 +1783,18 @@ export default function App() {
 
           {error && (
             <div className="error-banner" role="alert">
-              <strong>Error:</strong> {error}
+              <strong>Error:</strong> {error.message}
+              {/* A one-line failure that has more to it says so, rather than
+                  leaving the grown-up to guess what Gemini meant by it. */}
+              {error.details && (
+                <button
+                  type="button"
+                  className="btn-small"
+                  onClick={() => setErrorDetailsOpen(true)}
+                >
+                  What happened?
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-small"
@@ -1774,6 +1816,14 @@ export default function App() {
           leaving={waitGame.leaving}
           onHide={waitGame.hide}
           onClose={waitGame.close}
+        />
+      )}
+
+      {/* The reply behind a failure, for whoever wants to know why */}
+      {error?.details && errorDetailsOpen && (
+        <ErrorDetailsModal
+          details={error.details}
+          onClose={() => setErrorDetailsOpen(false)}
         />
       )}
 
