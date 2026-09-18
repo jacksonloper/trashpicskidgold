@@ -11,6 +11,7 @@ export default function Navbar({
   importing,
   onOpenTrash,
   trashCount,
+  onOpenSettings,
 }) {
   const handleImportChange = (e) => {
     const files = Array.from(e.target.files ?? []);
@@ -93,6 +94,15 @@ export default function Navbar({
             🗑️ Delete story
           </button>
         )}
+
+        <button
+          type="button"
+          className="btn-small"
+          onClick={onOpenSettings}
+          title="Choose which game is played while a picture is being made"
+        >
+          ⚙️ Settings
+        </button>
       </div>
     </nav>
   );

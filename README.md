@@ -38,6 +38,23 @@ answer instead — and a finger dragged across it still scrolls the page.
   its own for anything that wants an answer — the plan review, a confirmation,
   the trash.
 
+### Or a picture instead
+
+**⚙️ Settings** in the navbar picks which game the wait plays:
+
+- **Find the letter** — the game above.
+- **First letter of the picture** — a picture appears instead: a dog, a cat, an
+  apple. Type the letter its name starts with — `D` for the dog, `C` for the
+  cat. A picture that could be called two things takes either first letter (a
+  🐶 answered with `P` for puppy is right), and after two misses the little
+  line underneath whispers its name. On a phone, three letters to tap appear
+  under the picture, one of them right.
+
+The choice is remembered in the browser. Switching mid-wait deals a fresh
+target for the new game. **▶ Free play** in the same dialog starts the chosen
+game on the spot, with nothing being made, for trying it out at length; `Esc`
+or the ✕ ends it.
+
 ## When a picture doesn't arrive
 
 Half the time a generation fails, Gemini has already said exactly why — and

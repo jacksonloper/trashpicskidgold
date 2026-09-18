@@ -15,6 +15,8 @@ import UndoToast from "./components/UndoToast";
 import TrashBin from "./components/TrashBin";
 import WaitingGame from "./components/WaitingGame";
 import ErrorDetailsModal from "./components/ErrorDetailsModal";
+import SettingsDialog from "./components/SettingsDialog";
+import { loadSettings, saveSettings } from "./settingsStore";
 import {
   buildRefGraphicPrompt,
   planIllustration,
@@ -243,6 +245,21 @@ export default function App() {
   const [illustrationPlan, setIllustrationPlan] = useState(null); // { sectionId, prompt, referenceImageIds }
   const [error, setError] = useState(null); // { message, details } | null
   const [errorDetailsOpen, setErrorDetailsOpen] = useState(false);
+
+  /* ---- the grown-up's settings: which waiting game is played ---- */
+  const [settings, setSettings] = useState(loadSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const handleChangeSettings = useCallback((next) => {
+    setSettings(next);
+    saveSettings(next);
+  }, []);
+  const handleCloseSettings = useCallback(() => setSettingsOpen(false), []);
+  // The waiting game with nothing to wait for: on until the player waves it off.
+  const [freePlay, setFreePlay] = useState(false);
+  const handleFreePlay = useCallback(() => {
+    setSettingsOpen(false);
+    setFreePlay(true);
+  }, []);
   const [ready, setReady] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -1166,19 +1183,35 @@ export default function App() {
   useEffect(() => setErrorDetailsOpen(false), [error]);
 
   const waitGame = useWaitingGame({
-    active: makingArt,
+    active: makingArt || freePlay,
     // A dialog is a grown-up talking: the letter steps aside for one and comes
     // back afterwards if the picture is still on its way.
     suspended:
-      !!illustrationPlan || !!confirm || trashOpen || errorDetailsOpen,
+      !!illustrationPlan ||
+      !!confirm ||
+      trashOpen ||
+      errorDetailsOpen ||
+      settingsOpen,
   });
+
+  // Waving the game off is also how free play ends.
+  const hideWaitGame = waitGame.hide;
+  const handleHideWaitGame = useCallback(() => {
+    setFreePlay(false);
+    hideWaitGame();
+  }, [hideWaitGame]);
 
   // Off while a dialog owns the keyboard, so Escape-and-arrow habits inside
   // the plan or confirm dialogs don't move the story underneath them. The
   // waiting letter is not a dialog and doesn't take the page, so it doesn't
   // take these either.
   useSectionShortcuts(
-    !!story && !illustrationPlan && !confirm && !trashOpen && sections.length > 0,
+    !!story &&
+      !illustrationPlan &&
+      !confirm &&
+      !trashOpen &&
+      !settingsOpen &&
+      sections.length > 0,
     navigateSections
   );
 
@@ -1587,6 +1620,7 @@ export default function App() {
         importing={importing}
         onOpenTrash={handleOpenTrash}
         trashCount={trashCount}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       <div className="app">
@@ -1812,10 +1846,23 @@ export default function App() {
           the picture can be watched as it lands. */}
       {waitGame.on && (
         <WaitingGame
+          key={settings.waitingGame}
+          game={settings.waitingGame}
           visible={waitGame.visible}
           leaving={waitGame.leaving}
-          onHide={waitGame.hide}
+          freePlay={freePlay}
+          onHide={handleHideWaitGame}
           onClose={waitGame.close}
+        />
+      )}
+
+      {/* Which game the wait plays, and anything else a grown-up can change */}
+      {settingsOpen && (
+        <SettingsDialog
+          settings={settings}
+          onChange={handleChangeSettings}
+          onPlay={handleFreePlay}
+          onClose={handleCloseSettings}
         />
       )}
 

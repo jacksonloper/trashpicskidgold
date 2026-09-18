@@ -962,7 +962,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.section-description kbd {
+.section-description kbd,
+.settings-modal kbd {
   display: inline-block;
   padding: 0.05rem 0.3rem;
   border: 1px solid #d5d5d5;
@@ -1446,4 +1447,94 @@
   .error-details-facts dt {
     color: #666;
   }
+}
+
+/* ---- the picture game ---- */
+
+/*
+ * A picture in place of the letter. The white outline that keeps a letter
+ * legible would smear an emoji, so it goes, and the drop shadow does the
+ * lifting on its own.
+ */
+.waiting-letter-glyph.is-picture {
+  -webkit-text-stroke: 0;
+  letter-spacing: 0;
+}
+
+/* On a touch screen the answer is one of a few letters to tap. */
+.waiting-letter-choices {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.waiting-letter-choice {
+  pointer-events: auto;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #1f8fe0;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.waiting-letter-choice:active {
+  background: #176fb0;
+}
+
+/* ---- Settings dialog ---- */
+
+.settings-modal {
+  max-width: 480px;
+  padding: 1.75rem 2rem;
+}
+
+.settings-group {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.settings-group legend {
+  padding: 0;
+}
+
+.settings-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.settings-option:hover {
+  background: #f7f9fc;
+}
+
+.settings-option:has(input:checked) {
+  border-color: #1f8fe0;
+  background: #eef6fd;
+}
+
+.settings-option input {
+  margin: 0.2rem 0 0;
+}
+
+.settings-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.settings-option small {
+  color: #666;
+  font-size: 0.85rem;
+  line-height: 1.35;
 }
