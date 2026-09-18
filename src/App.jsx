@@ -48,6 +48,7 @@ import {
 } from "./db";
 import { loadExampleStory } from "./exampleStory";
 import useSectionShortcuts from "./useSectionShortcuts";
+import useReadAloud from "./useReadAloud";
 import useWaitingGame from "./useWaitingGame";
 import scrollIntoViewFully from "./scrollIntoViewFully";
 import {
@@ -1213,6 +1214,18 @@ export default function App() {
       !settingsOpen &&
       sections.length > 0,
     navigateSections
+  );
+
+  // P reads the page on screen aloud from the same spot, under the same
+  // rules; turning the page (or losing the story) cuts it short.
+  useReadAloud(
+    !!story &&
+      !illustrationPlan &&
+      !confirm &&
+      !trashOpen &&
+      !settingsOpen &&
+      !!activeSection,
+    activeSection
   );
 
   /* ---- acting on what is in the trash ---- */

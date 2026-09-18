@@ -8,6 +8,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Character Sheet** — define up to 4 characters with names and descriptions, then generate a character model sheet
 - **Story Pages** — add illustrated pages with captions; each illustration uses the character sheet as a visual reference for consistency
 - **Keyboard-first navigation** — the story index sits down the left on a wide screen; `\` (or one `Tab`) reaches it, then `↑`/`↓` turn pages and land with the illustration fully in view (`Alt`+`↑`/`↓` while you type; hold either to go faster)
+- **Read it to me** — with the keyboard on the story index, `P` reads the page aloud with the browser's own text-to-speech: an illustration's caption, or the words of a text block. Turning the page cuts it off mid-sentence, so the voice never lags behind the picture
 - **Pictures fit the window** — an illustration is scaled down to what is left of the window under the navbar, never cropped, so the whole of it is on screen at once; a phone-width window keeps the full-width picture instead
 - **Something to do while it draws** — a letter appears in the middle of the window for as long as the wait lasts; type it and it poofs, and another takes its place
 - **Failures that explain themselves** — when a picture doesn't arrive, the red banner says what happened in one line and **What happened?** opens the reply behind it: which filter stopped it, what Gemini wrote instead, what to try
