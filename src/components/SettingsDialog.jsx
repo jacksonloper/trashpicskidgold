@@ -6,9 +6,10 @@ import { WAITING_GAMES } from "../settingsStore";
  * letter plays while a picture is being made.
  *
  * Escape or a click outside closes it. A change takes effect as soon as it is
- * clicked — there is nothing to save, and nothing here can lose work.
+ * clicked — there is nothing to save, and nothing here can lose work. Free
+ * play starts the chosen game on the spot, for trying it out at length.
  */
-export default function SettingsDialog({ settings, onChange, onClose }) {
+export default function SettingsDialog({ settings, onChange, onPlay, onClose }) {
   const closeRef = useRef(null);
 
   useEffect(() => {
@@ -50,7 +51,15 @@ export default function SettingsDialog({ settings, onChange, onClose }) {
           ))}
         </fieldset>
 
+        <p className="confirm-note">
+          Free play starts the chosen game right now, with nothing being made.{" "}
+          <kbd>Esc</kbd> or its ✕ ends it.
+        </p>
+
         <div className="plan-modal-buttons">
+          <button type="button" className="btn-primary" onClick={onPlay}>
+            ▶ Free play
+          </button>
           <button
             type="button"
             className="btn-secondary"

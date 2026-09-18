@@ -51,7 +51,9 @@ answer instead — and a finger dragged across it still scrolls the page.
   under the picture, one of them right.
 
 The choice is remembered in the browser. Switching mid-wait deals a fresh
-target for the new game.
+target for the new game. **▶ Free play** in the same dialog starts the chosen
+game on the spot, with nothing being made, for trying it out at length; `Esc`
+or the ✕ ends it.
 
 ## When a picture doesn't arrive
 

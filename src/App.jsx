@@ -254,6 +254,12 @@ export default function App() {
     saveSettings(next);
   }, []);
   const handleCloseSettings = useCallback(() => setSettingsOpen(false), []);
+  // The waiting game with nothing to wait for: on until the player waves it off.
+  const [freePlay, setFreePlay] = useState(false);
+  const handleFreePlay = useCallback(() => {
+    setSettingsOpen(false);
+    setFreePlay(true);
+  }, []);
   const [ready, setReady] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -1177,7 +1183,7 @@ export default function App() {
   useEffect(() => setErrorDetailsOpen(false), [error]);
 
   const waitGame = useWaitingGame({
-    active: makingArt,
+    active: makingArt || freePlay,
     // A dialog is a grown-up talking: the letter steps aside for one and comes
     // back afterwards if the picture is still on its way.
     suspended:
@@ -1187,6 +1193,13 @@ export default function App() {
       errorDetailsOpen ||
       settingsOpen,
   });
+
+  // Waving the game off is also how free play ends.
+  const hideWaitGame = waitGame.hide;
+  const handleHideWaitGame = useCallback(() => {
+    setFreePlay(false);
+    hideWaitGame();
+  }, [hideWaitGame]);
 
   // Off while a dialog owns the keyboard, so Escape-and-arrow habits inside
   // the plan or confirm dialogs don't move the story underneath them. The
@@ -1837,7 +1850,8 @@ export default function App() {
           game={settings.waitingGame}
           visible={waitGame.visible}
           leaving={waitGame.leaving}
-          onHide={waitGame.hide}
+          freePlay={freePlay}
+          onHide={handleHideWaitGame}
           onClose={waitGame.close}
         />
       )}
@@ -1847,6 +1861,7 @@ export default function App() {
         <SettingsDialog
           settings={settings}
           onChange={handleChangeSettings}
+          onPlay={handleFreePlay}
           onClose={handleCloseSettings}
         />
       )}

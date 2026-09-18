@@ -126,13 +126,16 @@ function Poof({ target, picture }) {
 }
 
 /**
- * @param game  "letter" or "picture" — which game to play. The first target is
- *              dealt on mount, so a switch mid-wait wants a new `key`.
+ * @param game      "letter" or "picture" — which game to play. The first target
+ *                  is dealt on mount, so a switch mid-wait wants a new `key`.
+ * @param freePlay  nothing is being made: the ✕ ends the game rather than
+ *                  hiding it until the next picture
  */
 export default function WaitingGame({
   game = "letter",
   visible,
   leaving,
+  freePlay = false,
   onHide,
   onClose,
 }) {
@@ -295,8 +298,12 @@ export default function WaitingGame({
             type="button"
             className="waiting-letter-hide"
             onClick={onHide}
-            title="Hide this until the next picture (Esc)"
-            aria-label="Hide the waiting game"
+            title={
+              freePlay
+                ? "Stop playing (Esc)"
+                : "Hide this until the next picture (Esc)"
+            }
+            aria-label={freePlay ? "Stop playing" : "Hide the waiting game"}
           >
             ✕
           </button>

@@ -962,7 +962,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.section-description kbd {
+.section-description kbd,
+.settings-modal kbd {
   display: inline-block;
   padding: 0.05rem 0.3rem;
   border: 1px solid #d5d5d5;
