@@ -55,7 +55,8 @@ export default function SectionIndex({
         <kbd>Tab</kbd>) jumps to the list, then plain <kbd>↑</kbd>/<kbd>↓</kbd>{" "}
         (or <kbd>j</kbd>/<kbd>k</kbd>, <kbd>Home</kbd>/<kbd>End</kbd>) turn
         pages. <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> does the same while you
-        are typing; hold either to go faster.
+        are typing; hold either to go faster. <kbd>P</kbd> reads the page
+        aloud; turning the page stops it.
       </p>
 
       {sections.length === 0 ? (
@@ -83,7 +84,7 @@ export default function SectionIndex({
                   // Roving tabindex: Tab reaches the list once, at the row you
                   // are on, and the arrows take over from there.
                   tabIndex={isActive ? 0 : -1}
-                  aria-keyshortcuts={isActive ? "\\" : undefined}
+                  aria-keyshortcuts={isActive ? "\\ P" : undefined}
                   onClick={() => onSelect(sec.id)}
                 >
                   <span className="section-index-num">{idx + 1}</span>
