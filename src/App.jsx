@@ -243,7 +243,7 @@ export default function App() {
   const [generatingRefIds, setGeneratingRefIds] = useState({});
   const [generatingSections, setGeneratingSections] = useState({});
   const [planningSections, setPlanningSections] = useState({});
-  const [illustrationPlan, setIllustrationPlan] = useState(null); // { sectionId, prompt, referenceImageIds }
+  const [illustrationPlan, setIllustrationPlan] = useState(null); // { sectionId, frames: [{ sectionId?, caption, prompt, referenceImageIds }], imageModel?, notice }
   const [error, setError] = useState(null); // { message, details } | null
   const [errorDetailsOpen, setErrorDetailsOpen] = useState(false);
 
@@ -1495,7 +1495,8 @@ export default function App() {
         await saveImage({
           id: imgId,
           storyId: story.id,
-          caption: previous?.caption,
+          // A page split off a moment ago isn't in this render's sections yet.
+          caption: previous?.caption ?? plan.caption,
           data: dataUrl,
         });
 
@@ -1526,6 +1527,73 @@ export default function App() {
     ]
   );
 
+  /**
+   * Give every frame of a plan a page to be drawn on.
+   *
+   * The first frame without one goes on the page that was planned; each frame
+   * after it gets a new page straight after the one before, so a split caption
+   * reads in order. A frame's caption, when it has one, becomes its page's
+   * caption — that is how a split divides the words between the two pages.
+   * Frames that already have a page (a retry after a failed generation) keep
+   * it. Returns the frames with their `sectionId`s filled in.
+   */
+  const placeFrames = useCallback(
+    (anchorId, frames) => {
+      // Ids are made out here: an updater may run twice, and must agree.
+      const placed = frames.map((f, i) => ({
+        ...f,
+        sectionId: f.sectionId ?? (i === 0 ? anchorId : newSectionId()),
+      }));
+
+      updateStory((s) => {
+        let secs = s.jsonblob.sections;
+        placed.forEach((f, i) => {
+          if (!secs.some((sec) => sec.id === f.sectionId)) {
+            // Straight after the frame before it. If that page was removed
+            // meanwhile, there is nowhere to put this one.
+            const after = i === 0 ? anchorId : placed[i - 1].sectionId;
+            const at = secs.findIndex((sec) => sec.id === after);
+            if (at === -1) return;
+            secs = [
+              ...secs.slice(0, at + 1),
+              { id: f.sectionId, type: "illustration", caption: "", imageId: null },
+              ...secs.slice(at + 1),
+            ];
+          }
+          if (f.caption) {
+            secs = secs.map((sec) =>
+              sec.id === f.sectionId ? { ...sec, caption: f.caption } : sec
+            );
+          }
+        });
+        return secs === s.jsonblob.sections
+          ? s
+          : { ...s, jsonblob: { ...s.jsonblob, sections: secs } };
+      });
+
+      return placed;
+    },
+    [updateStory]
+  );
+
+  /**
+   * Draw every frame of a plan at once, each on its own page.
+   * Returns the frames that failed, placed, and why each did.
+   */
+  const runFrames = useCallback(
+    async (anchorId, frames, imageModel) => {
+      const placed = placeFrames(anchorId, frames);
+      const results = await Promise.all(
+        placed.map((f) => runGenerate(f.sectionId, { ...f, imageModel }))
+      );
+      return {
+        failed: placed.filter((_, i) => !results[i].ok),
+        reasons: results.filter((r) => !r.ok && r.error).map((r) => r.error),
+      };
+    },
+    [placeFrames, runGenerate]
+  );
+
   /** Plan only, then open the review modal. */
   const handlePlanIllustration = useCallback(
     async (sectionId, textModel) => {
@@ -1544,6 +1612,8 @@ export default function App() {
    * A plan that had to be salvaged from a damaged reply stops at the modal
    * instead — better to have the user look at a half-recovered prompt than to
    * spend a generation on it and replace the panel's artwork with the result.
+   * A plan split into two frames goes straight ahead: the second becomes a new
+   * page after this one, and both are drawn at the same time.
    */
   const handleGenerateIllustration = useCallback(
     async (sectionId, textModel, imageModel) => {
@@ -1559,32 +1629,46 @@ export default function App() {
         });
         return;
       }
-      await runGenerate(sectionId, { ...plan, imageModel });
+      await runFrames(sectionId, plan.frames, imageModel);
     },
-    [runGenerate, runPlan, story]
+    [runFrames, runPlan, story]
   );
 
   /**
    * The modal closes as generation starts, but a failed generation would
-   * otherwise take the reviewed prompt with it — so put it back on failure.
+   * otherwise take the reviewed prompt with it — so put it back on failure,
+   * holding only the frames that still need drawing.
    */
   const handleApproveIllustration = useCallback(
-    async (approvedPlan) => {
+    async ({ frames, imageModel }) => {
       const { sectionId } = illustrationPlan;
       setIllustrationPlan(null);
-      const { ok, error: failure } = await runGenerate(sectionId, approvedPlan);
-      if (!ok) {
+      const { failed, reasons } = await runFrames(
+        sectionId,
+        frames,
+        imageModel
+      );
+      if (failed.length > 0) {
+        const lead =
+          frames.length > 1 && failed.length < frames.length
+            ? "One of the two pictures failed" +
+              (reasons[0] ? ` — ${reasons[0]} ` : ". ") +
+              "The other was drawn; this is the one still to do. "
+            : reasons.length > 0
+              ? `That generation failed — ${reasons[0]} `
+              : "";
         setIllustrationPlan({
-          sectionId,
-          ...approvedPlan,
+          sectionId: failed[0].sectionId,
+          frames: failed,
+          imageModel,
           notice:
-            (failure ? `That generation failed — ${failure} ` : "") +
+            lead +
             "Your prompt and reference picks are still here, so you can " +
             "adjust them and try again.",
         });
       }
     },
-    [illustrationPlan, runGenerate]
+    [illustrationPlan, runFrames]
   );
 
   const handleCancelPlan = useCallback(() => setIllustrationPlan(null), []);
