@@ -701,6 +701,40 @@
   word-break: break-word;
 }
 
+/* A caption split into two pictures: one boxed block per picture. */
+.plan-split-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.plan-frame-split {
+  margin-top: 1rem;
+  padding: 0.25rem 1rem 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+}
+
+.plan-frame-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.plan-frame-head h4 {
+  margin: 0.75rem 0 0;
+}
+
+.plan-caption-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.plan-add-frame {
+  margin-top: 1rem;
+}
+
 .plan-modal-buttons {
   display: flex;
   gap: 0.75rem;

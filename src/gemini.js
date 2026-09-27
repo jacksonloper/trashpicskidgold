@@ -576,6 +576,9 @@ function damagedPlanError(message, what, raw, finishReason) {
   });
 }
 
+/** The most frames one caption may be split into. */
+export const MAX_FRAMES = 2;
+
 /**
  * Turn the planner's reply into a plan.
  *
@@ -585,18 +588,40 @@ function damagedPlanError(message, what, raw, finishReason) {
  * at all.  A salvaged plan is flagged `partial` so callers can insist on a
  * human look before spending an image generation on it.
  *
+ * The planner answers with `frames` — one picture, or two when the caption
+ * holds more than one picture can carry.  A reply in the old one-picture
+ * shape (`prompt` and `referenceImageIds` at the top) is read as one frame.
+ * A salvaged reply only ever yields its first frame: a half-read second
+ * frame is not worth a generation.
+ *
  * Exported for testing.
  *
  * @param {string} text          – raw reply text
  * @param {string|null} [finishReason]
- * @returns {{prompt:string, referenceImageIds:string[], partial:boolean}}
+ * @returns {{frames:Array<{caption:string, prompt:string, referenceImageIds:string[]}>, partial:boolean}}
  */
 export function parsePlannerReply(text, finishReason = null) {
   const raw = stripCodeFences(text ?? "");
 
+  const frame = (f) => ({
+    caption:
+      typeof f?.caption === "string"
+        ? f.caption.replace(/\s*\n\s*/g, " ").trim()
+        : "",
+    prompt: typeof f?.prompt === "string" ? f.prompt.trim() : "",
+    referenceImageIds: Array.isArray(f?.referenceImageIds)
+      ? f.referenceImageIds.filter((id) => typeof id === "string")
+      : [],
+  });
+
   const shape = (plan, partial) => {
-    const prompt = typeof plan.prompt === "string" ? plan.prompt.trim() : "";
-    if (!prompt) {
+    const listed = Array.isArray(plan?.frames) ? plan.frames : [plan];
+    // A frame without a prompt can't be drawn; drop it rather than the plan.
+    const frames = listed
+      .map(frame)
+      .filter((f) => f.prompt)
+      .slice(0, MAX_FRAMES);
+    if (frames.length === 0) {
       throw damagedPlanError(
         "The planning model didn't return a prompt." +
           finishReasonNote(finishReason) +
@@ -606,13 +631,7 @@ export function parsePlannerReply(text, finishReason = null) {
         finishReason
       );
     }
-    return {
-      prompt,
-      referenceImageIds: Array.isArray(plan.referenceImageIds)
-        ? plan.referenceImageIds.filter((id) => typeof id === "string")
-        : [],
-      partial,
-    };
+    return { frames, partial };
   };
 
   try {
@@ -635,7 +654,11 @@ export function parsePlannerReply(text, finishReason = null) {
   const prompt = salvageString(raw, "prompt");
   if (prompt && prompt.trim()) {
     return shape(
-      { prompt, referenceImageIds: salvageStringArray(raw, "referenceImageIds") },
+      {
+        caption: salvageString(raw, "caption") ?? "",
+        prompt,
+        referenceImageIds: salvageStringArray(raw, "referenceImageIds"),
+      },
       true
     );
   }
@@ -657,13 +680,17 @@ export function parsePlannerReply(text, finishReason = null) {
  * Query the Gemini chat completion to plan an illustration.
  *
  * Given the full story context, returns:
- *   { prompt: string, referenceImageIds: string[], partial: boolean }
+ *   { frames: [{ caption, prompt, referenceImageIds }], partial: boolean }
  *
- * The prompt is a detailed image-generation prompt and referenceImageIds lists
- * which reference graphics and/or existing illustration image IDs should be
- * attached when generating.  `partial` is true when the reply arrived damaged
- * and the plan had to be salvaged, so the caller should have the user review
- * it before generating.
+ * Usually one frame.  When the caption packs in more than one picture can
+ * show — two moments, two places — the planner may split it into two frames,
+ * each with its own caption, to be drawn side by side in time as two pages.
+ * Each prompt is a detailed image-generation prompt and referenceImageIds
+ * lists which reference graphics and/or existing illustration image IDs should
+ * be attached when generating it.  A one-frame plan's caption is empty: the
+ * page keeps the one it has.  `partial` is true when the reply arrived damaged and the plan
+ * had to be salvaged, so the caller should have the user review it before
+ * generating.
  *
  * @param {string} apiKey
  * @param {string} style         – illustration style description
@@ -672,7 +699,7 @@ export function parsePlannerReply(text, finishReason = null) {
  * @param {string} targetCaption – the caption for the illustration to generate
  * @param {Object<string,string>} allImages – imageId → dataUrl map of all loaded images
  * @param {string} [model]      – Gemini model to use (defaults to quality)
- * @returns {Promise<{prompt:string, referenceImageIds:string[], partial:boolean}>}
+ * @returns {Promise<{frames:Array<{caption:string, prompt:string, referenceImageIds:string[]}>, partial:boolean}>}
  */
 export async function planIllustration(
   apiKey,
@@ -716,16 +743,27 @@ export async function planIllustration(
     `## Available reference graphics (images the artist has prepared)\n${refLines || "(none)"}\n\n` +
     `## Available existing illustrations already generated\n${illustrationLines || "(none)"}\n\n` +
     `## Task\nThe user wants to generate an illustration for this scene:\n"${targetCaption}"\n\n` +
-    `Please produce a JSON object with exactly two keys:\n` +
-    `1. "prompt" – a detailed image-generation prompt. ` +
+    `## One picture or two\n` +
+    `Almost always this is one picture. But if the scene holds more than one picture can show without ` +
+    `losing something that matters — two separate moments ("before" and "after"), two places, or ` +
+    `an action and its result — split it into two frames that follow each other, like two panels ` +
+    `of a picture book. Never split into more than two, and never split a scene that one picture tells well.\n\n` +
+    `Please produce a JSON object with exactly one key, "frames": an array of one or two frame objects, ` +
+    `in story order. Each frame has exactly three keys:\n` +
+    `1. "caption" – the words printed under this picture and read aloud to a young child. ` +
+    `For a single frame, repeat the caption above unchanged. For two frames, divide the caption above ` +
+    `between them, keeping its wording as closely as you can.\n` +
+    `2. "prompt" – a detailed image-generation prompt for this frame alone. ` +
     `Start the prompt with the illustration style above so every image is rendered consistently. ` +
     `If any reference graphics are available, describe the relevant characters/scenes by their visual appearance ` +
     `as described in the reference graphic descriptions and as shown in the attached reference images. ` +
     `Use these visual references to ensure accurate character descriptions (species, colors, clothing, features) ` +
     `in your prompt, and instruct the generator to use the attached reference images for visual consistency. ` +
-    `Do NOT guess or invent visual details that are not present in the reference descriptions or images.\n` +
-    `2. "referenceImageIds" – an array of imageId strings from the reference graphics and/or existing illustrations above ` +
-    `that should be sent as visual context to the image generator. Include only images that are relevant to this scene.\n\n` +
+    `Do NOT guess or invent visual details that are not present in the reference descriptions or images. ` +
+    `The two frames are drawn at the same time, without either seeing the other, so each prompt must stand ` +
+    `on its own — describe the characters and setting fully in both.\n` +
+    `3. "referenceImageIds" – an array of imageId strings from the reference graphics and/or existing illustrations above ` +
+    `that should be sent as visual context to the image generator for this frame. Include only images that are relevant to it.\n\n` +
     (refsWithImages.length > 0
       ? `The reference graphic images are attached below, each preceded by a label. Study them carefully before writing the prompt.\n\n`
       : ``) +
@@ -769,7 +807,11 @@ export async function planIllustration(
   const { text, finishReason } = collectAnswerText(data);
   if (!text.trim()) throw noTextError(data, useModel);
 
-  return parsePlannerReply(text, finishReason);
+  const plan = parsePlannerReply(text, finishReason);
+  // One frame draws the caption as the user wrote it, so it has no caption of
+  // its own to write back — only a split divides the words between pages.
+  if (plan.frames.length === 1) plan.frames[0].caption = "";
+  return plan;
 }
 
 /**
