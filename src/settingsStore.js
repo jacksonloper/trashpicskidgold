@@ -18,6 +18,12 @@ export const WAITING_GAMES = [
     description:
       "A picture appears — a dog, a cat, an apple. Type the letter its name starts with.",
   },
+  {
+    id: "last",
+    label: "Last letter of the picture",
+    description:
+      "A picture appears — a cat, a drum, a bus. Type the letter its name ends with. Every name ends on a letter you can hear: no silent E, no dough.",
+  },
 ];
 
 export const DEFAULT_SETTINGS = Object.freeze({

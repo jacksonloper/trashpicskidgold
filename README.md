@@ -50,6 +50,13 @@ answer instead — and a finger dragged across it still scrolls the page.
   🐶 answered with `P` for puppy is right), and after two misses the little
   line underneath whispers its name. On a phone, three letters to tap appear
   under the picture, one of them right.
+- **Last letter of the picture** — the same, from the other end: `G` for the
+  dog, `T` for the cat. It draws from its own list of pictures, because a last
+  letter is so often not the last sound — nobody wants to explain why "dough"
+  ends in an H. Every name on it ends on a letter you can hear, and
+  `src/waitingPictures.js` checks that rather than trusting it: a name ending
+  in a silent E, a Y or W that's really a vowel, an R, an "uh" A, or a pair
+  like `gh`, `sh` or `ng` is dropped from the game, even if someone adds it.
 
 The choice is remembered in the browser. Switching mid-wait deals a fresh
 target for the new game. **▶ Free play** in the same dialog starts the chosen

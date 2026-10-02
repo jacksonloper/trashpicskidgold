@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import WAITING_PICTURES from "../waitingPictures";
+import WAITING_PICTURES, {
+  LAST_LETTER_WAITING_PICTURES,
+} from "../waitingPictures";
 
 /*
  * Something to find while a picture is being made.
@@ -12,6 +14,9 @@ import WAITING_PICTURES from "../waitingPictures";
  *   place.
  * - "picture": a picture — a dog, a cat, an apple. Type the letter its name
  *   starts with. D for the dog, C for the cat.
+ * - "last": a picture again, but the answer is the letter its name ends
+ *   with — G for the dog, T for the cat. Its pictures are a separate list,
+ *   every name ending on a letter you can hear.
  *
  * It deliberately does not cover the page. There is no panel, no dimmed
  * backdrop and no pointer events anywhere except the little ✕ (and the answer
@@ -69,9 +74,9 @@ function drawLetter(previous) {
  * A picture, the letters its name may start with, and — for a touch screen —
  * a few letters to choose from, one of them right.
  */
-function drawPicture(previous) {
+function drawPicture(pictures, previous) {
   let picture = null;
-  while (!picture || picture.emoji === previous) picture = pick(WAITING_PICTURES);
+  while (!picture || picture.emoji === previous) picture = pick(pictures);
   const choices = [picture.answers[0]];
   while (choices.length < CHOICES) {
     const decoy = pick(ALPHABET);
@@ -90,7 +95,12 @@ function drawPicture(previous) {
 
 /** The next thing to find: what shows, what answers it, and its colour. */
 function drawTarget(game, previous) {
-  const drawn = game === "picture" ? drawPicture(previous) : drawLetter(previous);
+  const drawn =
+    game === "picture"
+      ? drawPicture(WAITING_PICTURES, previous)
+      : game === "last"
+        ? drawPicture(LAST_LETTER_WAITING_PICTURES, previous)
+        : drawLetter(previous);
   return { id: nextId++, color: pick(COLORS), sparks: drawSparks(), ...drawn };
 }
 
@@ -126,7 +136,7 @@ function Poof({ target, picture }) {
 }
 
 /**
- * @param game      "letter" or "picture" — which game to play. The first target
+ * @param game      "letter", "picture" or "last" — which game to play. The first target
  *                  is dealt on mount, so a switch mid-wait wants a new `key`.
  * @param freePlay  nothing is being made: the ✕ ends the game rather than
  *                  hiding it until the next picture
@@ -139,7 +149,8 @@ export default function WaitingGame({
   onHide,
   onClose,
 }) {
-  const picture = game === "picture";
+  const picture = game === "picture" || game === "last";
+  const ends = game === "last" ? "end" : "start";
   const [target, setTarget] = useState(() => drawTarget(game, null));
   const [poof, setPoof] = useState(null);
   const [found, setFound] = useState(0);
@@ -236,14 +247,14 @@ export default function WaitingGame({
   }, [leaving]);
 
   const prompt = picture
-    ? "What letter does it start with?"
+    ? `What letter does it ${ends} with?`
     : tappable
       ? "Tap the letter!"
       : "Type the letter!";
   // A picture nobody can name is no fun: after a couple of misses, say its name.
   const hint = picture && target && misses >= HINT_AFTER ? target.word : null;
   const label = picture
-    ? `A ${target?.word}. What letter does it start with?`
+    ? `A ${target?.word}. What letter does it ${ends} with?`
     : `Find the letter ${target?.char}`;
 
   return (
