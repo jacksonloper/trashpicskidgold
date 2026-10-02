@@ -15,8 +15,10 @@ import WAITING_PICTURES, {
  * - "picture": a picture — a dog, a cat, an apple. Type the letter its name
  *   starts with. D for the dog, C for the cat.
  * - "last": a picture again, but the answer is the letter its name ends
- *   with — G for the dog, T for the cat. Its pictures are a separate list,
- *   every name ending on a letter you can hear.
+ *   with — G for the dog, T for the cat. A caterpillar under the picture
+ *   spells the name out, head first, with its tail segment empty: D, O, and
+ *   then what? Its pictures are a separate list, every name ending on a letter
+ *   you can hear, and the empty segment is the only answer it takes.
  *
  * It deliberately does not cover the page. There is no panel, no dimmed
  * backdrop and no pointer events anywhere except the little ✕ (and the answer
@@ -71,35 +73,44 @@ function drawLetter(previous) {
 }
 
 /**
- * A picture, the letters its name may start with, and — for a touch screen —
- * a few letters to choose from, one of them right.
+ * A picture, the letters that answer it, and — for a touch screen — a few
+ * letters to choose from, one of them right.
+ *
+ * @param answersOf  the letters a picture takes: every first letter its names
+ *                   have, or the one letter the spelled-out name ends on
  */
-function drawPicture(pictures, previous) {
+function drawPicture(pictures, previous, answersOf) {
   let picture = null;
   while (!picture || picture.emoji === previous) picture = pick(pictures);
-  const choices = [picture.answers[0]];
+  const answers = answersOf(picture);
+  const choices = [answers[0]];
   while (choices.length < CHOICES) {
     const decoy = pick(ALPHABET);
-    if (!picture.answers.includes(decoy) && !choices.includes(decoy)) {
+    if (!answers.includes(decoy) && !choices.includes(decoy)) {
       choices.push(decoy);
     }
   }
   choices.sort();
-  return {
-    char: picture.emoji,
-    answers: picture.answers,
-    word: picture.word,
-    choices,
-  };
+  return { char: picture.emoji, answers, word: picture.word, choices };
 }
+
+/** The letters a picture's names start with — D or P for a 🐶. */
+const firstLetters = (picture) => picture.answers;
+
+/**
+ * The one letter the name on the caterpillar ends with. The list already
+ * holds a single answer per picture; reading it off the word anyway means the
+ * empty segment and the key that fills it can never be two different letters.
+ */
+const lastLetterOfWord = (picture) => [picture.word.at(-1).toUpperCase()];
 
 /** The next thing to find: what shows, what answers it, and its colour. */
 function drawTarget(game, previous) {
   const drawn =
     game === "picture"
-      ? drawPicture(WAITING_PICTURES, previous)
+      ? drawPicture(WAITING_PICTURES, previous, firstLetters)
       : game === "last"
-        ? drawPicture(LAST_LETTER_WAITING_PICTURES, previous)
+        ? drawPicture(LAST_LETTER_WAITING_PICTURES, previous, lastLetterOfWord)
         : drawLetter(previous);
   return { id: nextId++, color: pick(COLORS), sparks: drawSparks(), ...drawn };
 }
@@ -136,6 +147,50 @@ function Poof({ target, picture }) {
 }
 
 /**
+ * The word under the picture in the last-letter game, spelled out along a
+ * caterpillar: a face, then a segment per letter, in rainbow order from the
+ * target's own colour. The tail segment is the one being asked for — empty
+ * and waiting until the right key fills it in.
+ *
+ * @param filled  the word has been answered: show the last letter too
+ * @param wrong   a wrong key was just pressed: the empty segment shakes
+ */
+function Caterpillar({ word, color, filled, wrong }) {
+  const letters = word.toUpperCase().split("");
+  const first = Math.max(0, COLORS.indexOf(color));
+  return (
+    <span
+      className={`waiting-caterpillar${wrong ? " is-wrong" : ""}`}
+      aria-hidden="true"
+    >
+      <i
+        className="waiting-caterpillar-head"
+        style={{ backgroundColor: COLORS[first] }}
+      />
+      {letters.map((letter, i) => {
+        const last = i === letters.length - 1;
+        const background = COLORS[(first + i + 1) % COLORS.length];
+        return (
+          <b
+            key={i}
+            className={`waiting-caterpillar-segment${
+              last ? (filled ? " is-filled" : " is-asked") : ""
+            }`}
+            style={
+              last && !filled
+                ? { color: background, borderColor: background }
+                : { background }
+            }
+          >
+            {last && !filled ? "?" : letter}
+          </b>
+        );
+      })}
+    </span>
+  );
+}
+
+/**
  * @param game      "letter", "picture" or "last" — which game to play. The first target
  *                  is dealt on mount, so a switch mid-wait wants a new `key`.
  * @param freePlay  nothing is being made: the ✕ ends the game rather than
@@ -150,7 +205,10 @@ export default function WaitingGame({
   onClose,
 }) {
   const picture = game === "picture" || game === "last";
-  const ends = game === "last" ? "end" : "start";
+  // The last-letter game spells the name out, so nothing about it is a secret
+  // but the one letter asked for.
+  const spelled = game === "last";
+  const ends = spelled ? "end" : "start";
   const [target, setTarget] = useState(() => drawTarget(game, null));
   const [poof, setPoof] = useState(null);
   const [found, setFound] = useState(0);
@@ -251,11 +309,21 @@ export default function WaitingGame({
     : tappable
       ? "Tap the letter!"
       : "Type the letter!";
-  // A picture nobody can name is no fun: after a couple of misses, say its name.
-  const hint = picture && target && misses >= HINT_AFTER ? target.word : null;
-  const label = picture
-    ? `A ${target?.word}. What letter does it ${ends} with?`
-    : `Find the letter ${target?.char}`;
+  // A picture nobody can name is no fun: after a couple of misses, say its
+  // name — unless it is already spelled out underneath.
+  const hint =
+    picture && !spelled && target && misses >= HINT_AFTER ? target.word : null;
+  const label = spelled
+    ? `A ${target?.word}, spelled ${target?.word
+        .slice(0, -1)
+        .toUpperCase()
+        .split("")
+        .join(", ")}, and one more. What letter does it end with?`
+    : picture
+      ? `A ${target?.word}. What letter does it ${ends} with?`
+      : `Find the letter ${target?.char}`;
+  // The caterpillar stays while the answered word poofs, filled in at last.
+  const spelling = spelled && !leaving ? (target ?? poof) : null;
 
   return (
     <div
@@ -285,6 +353,16 @@ export default function WaitingGame({
             </span>
           ))}
       </div>
+
+      {spelling && (
+        <Caterpillar
+          key={spelling.id}
+          word={spelling.word}
+          color={spelling.color}
+          filled={!target}
+          wrong={wrong}
+        />
+      )}
 
       {!leaving && (
         <p className="waiting-letter-pill">

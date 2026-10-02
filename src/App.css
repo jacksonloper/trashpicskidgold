@@ -1347,6 +1347,13 @@
   .waiting-letter-poof i {
     display: none;
   }
+
+  .waiting-caterpillar,
+  .waiting-caterpillar-segment.is-asked,
+  .waiting-caterpillar-segment.is-filled,
+  .waiting-caterpillar.is-wrong .waiting-caterpillar-segment.is-asked {
+    animation: none;
+  }
 }
 
 /* ---- What happened: the reply behind a one-line failure ---- */
@@ -1459,6 +1466,113 @@
 .waiting-letter-glyph.is-picture {
   -webkit-text-stroke: 0;
   letter-spacing: 0;
+}
+
+/*
+ * ---- the caterpillar ----
+ *
+ * The last-letter game spells the name out under the picture, one round
+ * segment per letter, with a face at the front so there is no mistaking
+ * which way the word runs. The tail segment is the letter being asked for:
+ * hollow, with a question mark in it, breathing a little so it is plainly
+ * the one that wants filling. Solid fills and a drop shadow keep it legible
+ * over whatever the page is showing, the way the white outline does for a
+ * letter.
+ */
+.waiting-caterpillar {
+  --segment: clamp(1.7rem, 7vmin, 2.9rem);
+  display: flex;
+  align-items: center;
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.2rem 0.2rem;
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.25));
+  user-select: none;
+  animation: waiting-letter-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.waiting-caterpillar-head,
+.waiting-caterpillar-segment {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--segment);
+  height: var(--segment);
+  border-radius: 50%;
+  margin-left: calc(var(--segment) * -0.12);
+  font-size: calc(var(--segment) * 0.6);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+}
+
+/* Every other segment lifts a little, so the body wriggles instead of lying
+   in a flat row. */
+.waiting-caterpillar-segment:nth-child(odd) {
+  transform: translateY(-9%);
+}
+
+/* The face: two eyes and a pair of antennae, in front of the first letter. */
+.waiting-caterpillar-head {
+  z-index: 1;
+  margin-left: 0;
+  width: calc(var(--segment) * 1.1);
+  height: calc(var(--segment) * 1.1);
+  background-image:
+    radial-gradient(circle at 36% 48%, #fff 0 15%, transparent 16%),
+    radial-gradient(circle at 70% 48%, #fff 0 15%, transparent 16%),
+    radial-gradient(circle at 36% 48%, #222 0 6%, transparent 7%),
+    radial-gradient(circle at 70% 48%, #222 0 6%, transparent 7%),
+    radial-gradient(ellipse 13% 6% at 53% 71%, #222 0 100%, transparent 100%);
+}
+
+.waiting-caterpillar-head::before,
+.waiting-caterpillar-head::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--segment) * -0.32);
+  left: 32%;
+  width: 3px;
+  height: calc(var(--segment) * 0.42);
+  border-radius: 2px;
+  background: inherit;
+  transform-origin: bottom center;
+  transform: rotate(-24deg);
+}
+
+.waiting-caterpillar-head::after {
+  left: auto;
+  right: 32%;
+  transform: rotate(24deg);
+}
+
+/* The letter being asked for: an empty segment, waiting. */
+.waiting-caterpillar-segment.is-asked {
+  background: rgba(255, 255, 255, 0.95);
+  border: 3px dashed currentColor;
+  box-sizing: border-box;
+  font-size: calc(var(--segment) * 0.5);
+  animation: waiting-caterpillar-ask 1.4s ease-in-out infinite;
+}
+
+@keyframes waiting-caterpillar-ask {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+/* A wrong key: the empty segment shakes its head, the rest of the bug waits. */
+.waiting-caterpillar.is-wrong .waiting-caterpillar-segment.is-asked {
+  animation: waiting-letter-wrong 0.4s ease-in-out;
+}
+
+/* The right key: the letter pops into place as the picture poofs. */
+.waiting-caterpillar-segment.is-filled {
+  animation: waiting-letter-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* On a touch screen the answer is one of a few letters to tap. */
