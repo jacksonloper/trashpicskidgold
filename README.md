@@ -51,12 +51,18 @@ answer instead — and a finger dragged across it still scrolls the page.
   line underneath whispers its name. On a phone, three letters to tap appear
   under the picture, one of them right.
 - **Last letter of the picture** — the same, from the other end: `G` for the
-  dog, `T` for the cat. It draws from its own list of pictures, because a last
-  letter is so often not the last sound — nobody wants to explain why "dough"
-  ends in an H. Every name on it ends on a letter you can hear, and
-  `src/waitingPictures.js` checks that rather than trusting it: a name ending
-  in a silent E, a Y or W that's really a vowel, an R, an "uh" A, or a pair
-  like `gh`, `sh` or `ng` is dropped from the game, even if someone adds it.
+  dog, `T` for the cat. So that nobody mistakes it for the first-letter game,
+  a caterpillar under the picture spells the name out, head first, one letter
+  to a segment — `D`, `O`, and a hollow tail segment with a `?` in it. The
+  whole word is on show from the start, so there is nothing to whisper after
+  two misses, and the only right answer is the letter that fills the tail:
+  a 🐱 is `C`-`A`-`?`, never a kitten. It draws from its own list of pictures,
+  because a last letter is so often not the last sound — nobody wants to
+  explain why "dough" ends in an H. Every name on it ends on a letter you can
+  hear, and `src/waitingPictures.js` checks that rather than trusting it: a
+  name ending in a silent E, a Y or W that's really a vowel, an R, an "uh" A,
+  or a pair like `gh`, `sh` or `ng` is dropped from the game, even if someone
+  adds it.
 
 The choice is remembered in the browser. Switching mid-wait deals a fresh
 target for the new game. **▶ Free play** in the same dialog starts the chosen

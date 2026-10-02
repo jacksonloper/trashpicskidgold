@@ -22,7 +22,7 @@ export const WAITING_GAMES = [
     id: "last",
     label: "Last letter of the picture",
     description:
-      "A picture appears — a cat, a drum, a bus. Type the letter its name ends with. Every name ends on a letter you can hear: no silent E, no dough.",
+      "A picture appears — a cat, a drum, a bus — and a caterpillar underneath spells its name, all but the last letter. Type the letter that fills it in. Every name ends on a letter you can hear: no silent E, no dough.",
   },
 ];
 

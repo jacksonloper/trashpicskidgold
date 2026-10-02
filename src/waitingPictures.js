@@ -76,9 +76,13 @@ const PICTURES = [
  *
  * A few vowels make it in where the vowel says its own name — the O at the
  * end of "hippo" is the O you'd sing in the alphabet song.
+ *
+ * One name each, and no second answers: the game spells the name out under
+ * the picture with only its last letter missing, so a 🐱 is a C-A-_ and a
+ * kitten would be a different word entirely.
  */
 const LAST_LETTER_PICTURES = [
-  ["🐱", "cat", "kitten"],
+  ["🐱", "cat"],
   ["🐶", "dog"],
   ["🐷", "pig"],
   ["🦊", "fox"],
@@ -87,10 +91,10 @@ const LAST_LETTER_PICTURES = [
   ["🦆", "duck"],
   ["🐜", "ant"],
   ["🦉", "owl"],
-  ["🐛", "bug", "worm"],
-  ["🐞", "ladybug", "ladybird"],
+  ["🐛", "bug"],
+  ["🐞", "ladybug"],
   ["🐐", "goat"],
-  ["🐔", "chicken", "hen"],
+  ["🐔", "chicken"],
   ["🦀", "crab"],
   ["🐙", "octopus"],
   ["🦈", "shark"],
@@ -122,9 +126,9 @@ const LAST_LETTER_PICTURES = [
   ["✏️", "pencil"],
   ["🛏️", "bed"],
   ["⏰", "clock"],
-  ["🎁", "present", "gift"],
+  ["🎁", "present"],
   ["👑", "crown"],
-  ["💎", "diamond", "gem"],
+  ["💎", "diamond"],
   ["🪣", "bucket"],
   ["🧲", "magnet"],
   ["🎹", "piano"],
@@ -137,7 +141,7 @@ const LAST_LETTER_PICTURES = [
   ["🥕", "carrot"],
   ["🍞", "bread"],
   ["🥚", "egg"],
-  ["🥜", "peanut", "nut"],
+  ["🥜", "peanut"],
   ["🍄", "mushroom"],
   ["🥛", "milk"],
   ["🌮", "taco"],
@@ -163,7 +167,11 @@ function endsOnItsOwnSound(word) {
   return true;
 }
 
-/** The pictures, with the letters each one will take as an answer. */
+/**
+ * The pictures, with the letters each one will take as an answer. A picture
+ * with one name has one answer; the last-letter list is all one-name pictures,
+ * so there the spelled-out name and the accepted letter can never disagree.
+ */
 function withAnswers(pictures, letterOf) {
   return pictures.flatMap(([emoji, ...names]) => {
     const words = names.filter((w) => letterOf(w));
