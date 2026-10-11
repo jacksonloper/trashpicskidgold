@@ -24,6 +24,12 @@ export const WAITING_GAMES = [
     description:
       "A picture appears — a cat, a drum, a bus — and a caterpillar underneath spells its name, all but the last letter. Type the letter that fills it in. Every name ends on a letter you can hear: no silent E, no dough.",
   },
+  {
+    id: "claw",
+    label: "Claw machine",
+    description:
+      "A claw machine full of letter balls. Slide the claw with ← and →, drop it with ↓ or Space, and fish out the letter on the sign. Typing the letter sends the claw for it too.",
+  },
 ];
 
 export const DEFAULT_SETTINGS = Object.freeze({

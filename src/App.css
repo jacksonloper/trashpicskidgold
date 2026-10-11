@@ -1652,3 +1652,255 @@
   font-size: 0.85rem;
   line-height: 1.35;
 }
+
+/*
+ * ---- the claw machine ----
+ *
+ * A small cabinet in the middle of the window: a sign with the letter wanted,
+ * and a glass box with a claw on a rail and a pile of letter balls at the
+ * bottom. Like the letter it replaces, it takes no clicks — except the balls
+ * themselves on a touch screen, where a tap is how to pick one.
+ */
+.claw-machine {
+  --glass: clamp(9rem, 34vmin, 14rem);
+  --ball: clamp(2.3rem, 9vmin, 3.2rem);
+  width: min(88vw, 21rem);
+  padding: 0.5rem 0.55rem 0.7rem;
+  border-radius: 18px;
+  background: linear-gradient(#ff6f9c, #e5397c);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.28),
+    inset 0 -6px 0 rgba(0, 0, 0, 0.15);
+  user-select: none;
+  animation: waiting-letter-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.claw-machine.is-leaving {
+  animation: waiting-letter-out 0.42s ease-out forwards;
+}
+
+.claw-sign {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.1rem;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.claw-sign b {
+  display: grid;
+  place-items: center;
+  min-width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 10px;
+  background: #fff8c4;
+  color: #e5397c;
+  font-size: 2rem;
+  line-height: 1;
+  text-shadow: none;
+  box-shadow: 0 0 0 3px #ffd93b, 0 0 14px #ffe98a;
+  animation: waiting-letter-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.claw-glass {
+  position: relative;
+  height: var(--glass);
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(160deg, #e8f6ff 0%, #c7e6fb 100%);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.7);
+}
+
+.claw-rail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 7px;
+  background: #6b7280;
+}
+
+/* The claw hangs from the rail and slides along it. */
+.claw {
+  position: absolute;
+  top: 4px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+  transition-property: left;
+  transition-timing-function: ease-in-out;
+}
+
+.claw-cable {
+  width: 3px;
+  height: 0.8rem;
+  background: #4b5563;
+  transition: height 0.52s ease-in-out;
+}
+
+/* Down far enough for the prongs to close around a ball in the pile. */
+.claw.is-down .claw-cable {
+  height: calc(var(--glass) - var(--ball) * 1.05 - 1.6rem);
+}
+
+.claw-head {
+  position: relative;
+  width: calc(var(--ball) * 0.85);
+  height: 0.75rem;
+  border-radius: 6px 6px 3px 3px;
+  background: #9ca3af;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+}
+
+/* Two prongs, swung open until something is in them. */
+.claw-head::before,
+.claw-head::after {
+  content: "";
+  position: absolute;
+  top: 70%;
+  z-index: 2;
+  width: 4px;
+  height: calc(var(--ball) * 0.62);
+  border-radius: 2px;
+  background: #6b7280;
+  transform-origin: top center;
+  transition: transform 0.18s ease;
+}
+
+.claw-head::before {
+  left: -3px;
+  transform: rotate(32deg);
+}
+
+.claw-head::after {
+  right: -3px;
+  transform: rotate(-32deg);
+}
+
+.claw.is-closed .claw-head::before {
+  transform: rotate(-6deg);
+}
+
+.claw.is-closed .claw-head::after {
+  transform: rotate(6deg);
+}
+
+/* A ball in the claw rides along just under the head, between the prongs. */
+.claw-head > .claw-ball,
+.claw-head > .claw-ball-poof {
+  position: absolute;
+  top: 0.45rem;
+  left: 50%;
+  translate: -50% 0;
+}
+
+.claw.is-wobbling .claw-head > .claw-ball {
+  animation: waiting-letter-wrong 0.4s ease-in-out;
+}
+
+.claw-pile {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.35rem;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  place-items: center;
+  animation: waiting-letter-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.claw-pile-slot {
+  display: grid;
+  place-items: center;
+  height: var(--ball);
+}
+
+.claw-ball {
+  display: grid;
+  place-items: center;
+  width: var(--ball);
+  height: var(--ball);
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  font: inherit;
+  font-size: calc(var(--ball) * 0.55);
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+  background-image: radial-gradient(
+    circle at 32% 28%,
+    rgba(255, 255, 255, 0.55) 0 14%,
+    transparent 15%
+  );
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.16);
+}
+
+button.claw-ball {
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* A wrong ball let go of: it falls back into its place and bounces. */
+.claw-ball.is-slipped {
+  animation: claw-ball-slip 0.4s cubic-bezier(0.3, 1.4, 0.6, 1);
+}
+
+@keyframes claw-ball-slip {
+  from {
+    transform: translateY(calc(var(--glass) * -0.5));
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.claw-ball-poof {
+  display: grid;
+  place-items: center;
+}
+
+.claw-ball-poof > .claw-ball {
+  grid-area: 1 / 1;
+}
+
+.claw-ball.is-poofing {
+  animation: waiting-letter-out 0.42s ease-out forwards;
+}
+
+.claw-ball-poof > i {
+  grid-area: 1 / 1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  opacity: 0;
+  animation: waiting-letter-spark 0.42s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .claw-machine,
+  .claw-sign b,
+  .claw-pile,
+  .claw-ball.is-slipped,
+  .claw.is-wobbling .claw-head > .claw-ball {
+    animation: none;
+  }
+
+  .claw-machine.is-leaving,
+  .claw-ball.is-poofing {
+    animation: none;
+    opacity: 0;
+  }
+
+  .claw-ball-poof > i {
+    display: none;
+  }
+}
