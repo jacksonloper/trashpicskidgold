@@ -63,6 +63,15 @@ answer instead — and a finger dragged across it still scrolls the page.
   name ending in a silent E, a Y or W that's really a vowel, an R, an "uh" A,
   or a pair like `gh`, `sh` or `ng` is dropped from the game, even if someone
   adds it.
+- **Claw machine** — a little claw machine full of letter balls, with the
+  letter wanted lit up on its sign. `←` and `→` slide the claw along its rail,
+  `↓` or `Space` drops it, and whatever ball is underneath comes up with it.
+  The right one goes off in a burst; a wrong one wobbles at the top and slips
+  back into the pile, free to try again. Typing the letter sends the claw for
+  it by itself, so a kid who knows the key but can't steer yet still gets to
+  watch it grab. The arrow keys are left alone while the story list has them
+  for turning pages, and `Space` is left alone while a button has the focus.
+  On a phone, tap a ball and the claw goes for it.
 
 The choice is remembered in the browser. Switching mid-wait deals a fresh
 target for the new game. **▶ Free play** in the same dialog starts the chosen

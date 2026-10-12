@@ -2,6 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import WAITING_PICTURES, {
   LAST_LETTER_WAITING_PICTURES,
 } from "../waitingPictures";
+import {
+  ALPHABET,
+  COLORS,
+  POOF_MS,
+  drawSparks,
+  isTyping,
+  pick,
+} from "../waitingFx";
+import ClawGame from "./ClawGame";
 
 /*
  * Something to find while a picture is being made.
@@ -19,6 +28,8 @@ import WAITING_PICTURES, {
  *   spells the name out, head first, with its tail segment empty: D, O, and
  *   then what? Its pictures are a separate list, every name ending on a letter
  *   you can hear, and the empty segment is the only answer it takes.
+ * - "claw": a claw machine full of letter balls. Steer the claw over the one
+ *   asked for and grab it — see ClawGame.
  *
  * It deliberately does not cover the page. There is no panel, no dimmed
  * backdrop and no pointer events anywhere except the little ✕ (and the answer
@@ -27,43 +38,12 @@ import WAITING_PICTURES, {
  * stays theirs the moment they put the caret in a text box.
  */
 
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-const COLORS = [
-  "#e5397c",
-  "#f2760c",
-  "#e0a800",
-  "#2fa84f",
-  "#1f8fe0",
-  "#8b5cf6",
-];
-
-/** How long a target takes to vanish, and how long until the next one. */
-const POOF_MS = 420;
-const SPARKS = 12;
 /** Wrong guesses at a picture before its name is whispered. */
 const HINT_AFTER = 2;
 /** Letters to pick from on a touch screen, where there is no keyboard. */
 const CHOICES = 3;
 
 let nextId = 1;
-
-function pick(list) {
-  return list[Math.floor(Math.random() * list.length)];
-}
-
-/** The burst a target goes out in. */
-function drawSparks() {
-  return Array.from({ length: SPARKS }, (unused, i) => {
-    const angle = (Math.PI * 2 * i) / SPARKS + Math.random() * 0.5;
-    const distance = 70 + Math.random() * 80;
-    return {
-      dx: `${Math.round(Math.cos(angle) * distance)}px`,
-      dy: `${Math.round(Math.sin(angle) * distance)}px`,
-      color: pick(COLORS),
-    };
-  });
-}
 
 /** A letter, and the one key that answers it. */
 function drawLetter(previous) {
@@ -113,17 +93,6 @@ function drawTarget(game, previous) {
         ? drawPicture(LAST_LETTER_WAITING_PICTURES, previous, lastLetterOfWord)
         : drawLetter(previous);
   return { id: nextId++, color: pick(COLORS), sparks: drawSparks(), ...drawn };
-}
-
-/** Somewhere a letter key means a letter, not a guess. */
-function isTyping(el) {
-  if (!el) return false;
-  return (
-    el.isContentEditable ||
-    el.tagName === "INPUT" ||
-    el.tagName === "TEXTAREA" ||
-    el.tagName === "SELECT"
-  );
 }
 
 /** A target on its way out: the glyph blowing up, and the burst behind it. */
@@ -191,12 +160,18 @@ function Caterpillar({ word, color, filled, wrong }) {
 }
 
 /**
- * @param game      "letter", "picture" or "last" — which game to play. The first target
- *                  is dealt on mount, so a switch mid-wait wants a new `key`.
+ * @param game      "letter", "picture", "last" or "claw" — which game to play.
+ *                  The first target is dealt on mount, so a switch mid-wait
+ *                  wants a new `key`.
  * @param freePlay  nothing is being made: the ✕ ends the game rather than
  *                  hiding it until the next picture
  */
-export default function WaitingGame({
+export default function WaitingGame(props) {
+  return props.game === "claw" ? <ClawGame {...props} /> : <FindGame {...props} />;
+}
+
+/** The games where the answer is a key: a letter, or a picture's letter. */
+function FindGame({
   game = "letter",
   visible,
   leaving,
