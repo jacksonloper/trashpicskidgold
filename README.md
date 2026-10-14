@@ -56,7 +56,8 @@ answer instead — and a finger dragged across it still scrolls the page.
   to a segment — `D`, `O`, and a hollow tail segment with a `?` in it. The
   whole word is on show from the start, so there is nothing to whisper after
   two misses, and the only right answer is the letter that fills the tail:
-  a 🐱 is `C`-`A`-`?`, never a kitten. It draws from its own list of pictures,
+  a 🐱 is `C`-`A`-`?`, never a kitten. Three wrong guesses is a miss: the
+  tail fills in with the answer, no star, and the next picture comes along. It draws from its own list of pictures,
   because a last letter is so often not the last sound — nobody wants to
   explain why "dough" ends in an H. Every name on it ends on a letter you can
   hear, and `src/waitingPictures.js` checks that rather than trusting it: a

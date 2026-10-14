@@ -1575,6 +1575,46 @@
   animation: waiting-letter-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Out of guesses: the answer fills in without the fanfare, and the picture
+   sinks away rather than bursting. */
+.waiting-caterpillar-segment.is-filled.is-missed {
+  animation: waiting-caterpillar-reveal 0.5s ease-out;
+}
+
+@keyframes waiting-caterpillar-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.waiting-letter-glyph.is-missed {
+  animation: waiting-letter-missed 1.6s ease-in forwards;
+}
+
+@keyframes waiting-letter-missed {
+  0%,
+  60% {
+    transform: scale(1);
+    opacity: 1;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28)) grayscale(0);
+  }
+  100% {
+    transform: scale(0.6) translateY(20%);
+    opacity: 0;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28)) grayscale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waiting-letter-glyph.is-missed,
+  .waiting-caterpillar-segment.is-filled.is-missed {
+    animation: none;
+  }
+}
+
 /* On a touch screen the answer is one of a few letters to tap. */
 .waiting-letter-choices {
   display: inline-flex;
