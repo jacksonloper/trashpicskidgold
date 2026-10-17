@@ -369,6 +369,14 @@ export default function WaitingGame({
 
         {failed && !leaving && (
           <span
+            key={`missed-ring-${failed.id}`}
+            className="waiting-letter-missed-ring"
+            aria-hidden="true"
+          />
+        )}
+
+        {failed && !leaving && (
+          <span
             key={`missed-${failed.id}`}
             className="waiting-letter-glyph is-picture is-missed"
             role="img"

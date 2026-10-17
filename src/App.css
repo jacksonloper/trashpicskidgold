@@ -1608,9 +1608,61 @@
   }
 }
 
+/* The tail filled in for you is red, not the next colour of the rainbow. */
+.waiting-caterpillar-segment.is-filled.is-missed {
+  background: #e53935 !important;
+  box-shadow: 0 0 0 3px #fff;
+}
+
+/* …and a red ring slams down around the picture: that one's a miss. */
+.waiting-letter-missed-ring {
+  grid-area: 1 / 1;
+  font-size: clamp(5rem, 22vmin, 11rem);
+  width: 1.45em;
+  height: 1.45em;
+  box-sizing: border-box;
+  border: 0.11em solid #e53935;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 4px #fff,
+    inset 0 0 0 4px #fff,
+    0 4px 12px rgba(0, 0, 0, 0.28);
+  animation: waiting-letter-missed-ring 1.6s ease-out forwards;
+}
+
+@keyframes waiting-letter-missed-ring {
+  0% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  12% {
+    transform: scale(0.94);
+    opacity: 1;
+  }
+  20% {
+    transform: scale(1) translateX(-8px);
+  }
+  28% {
+    transform: translateX(7px);
+  }
+  36% {
+    transform: translateX(-4px);
+  }
+  44%,
+  70% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .waiting-letter-glyph.is-missed,
-  .waiting-caterpillar-segment.is-filled.is-missed {
+  .waiting-caterpillar-segment.is-filled.is-missed,
+  .waiting-letter-missed-ring {
     animation: none;
   }
 }
