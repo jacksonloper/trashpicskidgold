@@ -1641,6 +1641,47 @@
   animation: waiting-letter-won-ring 0.8s ease-out forwards;
 }
 
+/* …and twinkles: little four-pointed stars winking on and off round the rim. */
+.waiting-letter-ring.is-won {
+  position: relative;
+}
+
+.waiting-letter-ring.is-won i {
+  position: absolute;
+  width: 1em;
+  height: 1em;
+  margin: -0.5em 0 0 -0.5em;
+  background: radial-gradient(circle, #fff 0 30%, #fff3b0 55%, #ffd23f 100%);
+  clip-path: polygon(
+    50% 0%,
+    61% 39%,
+    100% 50%,
+    61% 61%,
+    50% 100%,
+    39% 61%,
+    0% 50%,
+    39% 39%
+  );
+  filter: drop-shadow(0 0 2px #c98a00) drop-shadow(0 0 6px #fff);
+  opacity: 0;
+  animation: waiting-letter-twinkle 0.45s ease-in-out both;
+}
+
+@keyframes waiting-letter-twinkle {
+  0% {
+    transform: scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2) rotate(45deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0) rotate(90deg);
+    opacity: 0;
+  }
+}
+
 @keyframes waiting-letter-won-ring {
   0% {
     transform: scale(0.5);
@@ -1693,7 +1734,8 @@
 @media (prefers-reduced-motion: reduce) {
   .waiting-letter-glyph.is-missed,
   .waiting-caterpillar-segment.is-filled.is-missed,
-  .waiting-letter-ring {
+  .waiting-letter-ring,
+  .waiting-letter-ring.is-won i {
     animation: none;
   }
 }

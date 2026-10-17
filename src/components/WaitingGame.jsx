@@ -54,6 +54,18 @@ const FAIL_MS = 1600;
 /** Letters to pick from on a touch screen, where there is no keyboard. */
 const CHOICES = 3;
 
+/** Where the gold ring twinkles: spots around its rim, each on its own beat. */
+const RING_TWINKLES = Array.from({ length: 8 }, (unused, i) => {
+  const angle = (Math.PI * 2 * i) / 8 - Math.PI / 2;
+  const reach = i % 2 ? 58 : 52; // % of the ring: some on it, some just past
+  return {
+    left: `${50 + reach * Math.cos(angle)}%`,
+    top: `${50 + reach * Math.sin(angle)}%`,
+    animationDelay: `${120 + ((i * 3) % 8) * 45}ms`,
+    fontSize: i % 2 ? "0.2em" : "0.28em",
+  };
+});
+
 let nextId = 1;
 
 function pick(list) {
@@ -374,7 +386,11 @@ export default function WaitingGame({
             key={`won-ring-${poof.id}`}
             className="waiting-letter-ring is-won"
             aria-hidden="true"
-          />
+          >
+            {RING_TWINKLES.map((t, i) => (
+              <i key={i} style={t} />
+            ))}
+          </span>
         )}
 
         {failed && !leaving && (
