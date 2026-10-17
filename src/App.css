@@ -1614,8 +1614,9 @@
   box-shadow: 0 0 0 3px #fff;
 }
 
-/* …and a red ring slams down around the picture: that one's a miss. */
-.waiting-letter-missed-ring {
+/* …and a red ring slams down around the picture: that one's a miss. A right
+   answer gets the same ring in gold. */
+.waiting-letter-ring {
   grid-area: 1 / 1;
   font-size: clamp(5rem, 22vmin, 11rem);
   width: 1.45em;
@@ -1623,11 +1624,41 @@
   box-sizing: border-box;
   border: 0.11em solid #e53935;
   border-radius: 50%;
+  pointer-events: none;
   box-shadow:
     0 0 0 4px #fff,
     inset 0 0 0 4px #fff,
     0 4px 12px rgba(0, 0, 0, 0.28);
   animation: waiting-letter-missed-ring 1.6s ease-out forwards;
+}
+
+.waiting-letter-ring.is-won {
+  border-color: #f5b800;
+  box-shadow:
+    0 0 0 4px #fff,
+    inset 0 0 0 4px #fff,
+    0 0 24px rgba(255, 196, 0, 0.75);
+  animation: waiting-letter-won-ring 0.8s ease-out forwards;
+}
+
+@keyframes waiting-letter-won-ring {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  40%,
+  70% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
 }
 
 @keyframes waiting-letter-missed-ring {
@@ -1662,7 +1693,7 @@
 @media (prefers-reduced-motion: reduce) {
   .waiting-letter-glyph.is-missed,
   .waiting-caterpillar-segment.is-filled.is-missed,
-  .waiting-letter-missed-ring {
+  .waiting-letter-ring {
     animation: none;
   }
 }

@@ -42,6 +42,8 @@ const COLORS = [
 
 /** How long a target takes to vanish, and how long until the next one. */
 const POOF_MS = 420;
+/** …but a right last letter lingers, to show off its gold ring. */
+const WON_MS = 800;
 const SPARKS = 12;
 /** Wrong guesses at a picture before its name is whispered. */
 const HINT_AFTER = 2;
@@ -302,7 +304,7 @@ export default function WaitingGame({
         targetRef.current = next;
         setTarget(next);
         setPoof(null);
-      }, POOF_MS);
+      }, gameRef.current === "last" ? WON_MS : POOF_MS);
     },
     [later]
   );
@@ -367,10 +369,18 @@ export default function WaitingGame({
       <div className="waiting-letter-stack">
         {poof && <Poof key={`poof-${poof.id}`} target={poof} picture={picture} />}
 
+        {poof && spelled && (
+          <span
+            key={`won-ring-${poof.id}`}
+            className="waiting-letter-ring is-won"
+            aria-hidden="true"
+          />
+        )}
+
         {failed && !leaving && (
           <span
             key={`missed-ring-${failed.id}`}
-            className="waiting-letter-missed-ring"
+            className="waiting-letter-ring is-missed"
             aria-hidden="true"
           />
         )}
