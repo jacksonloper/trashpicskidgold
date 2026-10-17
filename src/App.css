@@ -1575,6 +1575,171 @@
   animation: waiting-letter-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Out of guesses: the answer fills in without the fanfare, and the picture
+   sinks away rather than bursting. */
+.waiting-caterpillar-segment.is-filled.is-missed {
+  animation: waiting-caterpillar-reveal 0.5s ease-out;
+}
+
+@keyframes waiting-caterpillar-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.waiting-letter-glyph.is-missed {
+  animation: waiting-letter-missed 1.6s ease-in forwards;
+}
+
+@keyframes waiting-letter-missed {
+  0%,
+  60% {
+    transform: scale(1);
+    opacity: 1;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28)) grayscale(0);
+  }
+  100% {
+    transform: scale(0.6) translateY(20%);
+    opacity: 0;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28)) grayscale(1);
+  }
+}
+
+/* The tail filled in for you is red, not the next colour of the rainbow. */
+.waiting-caterpillar-segment.is-filled.is-missed {
+  background: #e53935 !important;
+  box-shadow: 0 0 0 3px #fff;
+}
+
+/* …and a red ring slams down around the picture: that one's a miss. A right
+   answer gets the same ring in gold. */
+.waiting-letter-ring {
+  grid-area: 1 / 1;
+  font-size: clamp(5rem, 22vmin, 11rem);
+  width: 1.45em;
+  height: 1.45em;
+  box-sizing: border-box;
+  border: 0.11em solid #e53935;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 4px #fff,
+    inset 0 0 0 4px #fff,
+    0 4px 12px rgba(0, 0, 0, 0.28);
+  animation: waiting-letter-missed-ring 1.6s ease-out forwards;
+}
+
+.waiting-letter-ring.is-won {
+  border-color: #f5b800;
+  box-shadow:
+    0 0 0 4px #fff,
+    inset 0 0 0 4px #fff,
+    0 0 24px rgba(255, 196, 0, 0.75);
+  animation: waiting-letter-won-ring 0.8s ease-out forwards;
+}
+
+/* …and twinkles: little four-pointed stars winking on and off round the rim. */
+.waiting-letter-ring.is-won {
+  position: relative;
+}
+
+.waiting-letter-ring.is-won i {
+  position: absolute;
+  width: 1em;
+  height: 1em;
+  margin: -0.5em 0 0 -0.5em;
+  background: radial-gradient(circle, #fff 0 30%, #fff3b0 55%, #ffd23f 100%);
+  clip-path: polygon(
+    50% 0%,
+    61% 39%,
+    100% 50%,
+    61% 61%,
+    50% 100%,
+    39% 61%,
+    0% 50%,
+    39% 39%
+  );
+  filter: drop-shadow(0 0 2px #c98a00) drop-shadow(0 0 6px #fff);
+  opacity: 0;
+  animation: waiting-letter-twinkle 0.45s ease-in-out both;
+}
+
+@keyframes waiting-letter-twinkle {
+  0% {
+    transform: scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2) rotate(45deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0) rotate(90deg);
+    opacity: 0;
+  }
+}
+
+@keyframes waiting-letter-won-ring {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  40%,
+  70% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+@keyframes waiting-letter-missed-ring {
+  0% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  12% {
+    transform: scale(0.94);
+    opacity: 1;
+  }
+  20% {
+    transform: scale(1) translateX(-8px);
+  }
+  28% {
+    transform: translateX(7px);
+  }
+  36% {
+    transform: translateX(-4px);
+  }
+  44%,
+  70% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waiting-letter-glyph.is-missed,
+  .waiting-caterpillar-segment.is-filled.is-missed,
+  .waiting-letter-ring,
+  .waiting-letter-ring.is-won i {
+    animation: none;
+  }
+}
+
 /* On a touch screen the answer is one of a few letters to tap. */
 .waiting-letter-choices {
   display: inline-flex;

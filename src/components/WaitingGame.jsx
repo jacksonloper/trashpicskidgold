@@ -18,7 +18,9 @@ import WAITING_PICTURES, {
  *   with — G for the dog, T for the cat. A caterpillar under the picture
  *   spells the name out, head first, with its tail segment empty: D, O, and
  *   then what? Its pictures are a separate list, every name ending on a letter
- *   you can hear, and the empty segment is the only answer it takes.
+ *   you can hear, and the empty segment is the only answer it takes. Three
+ *   wrong guesses and that one's a miss: the answer fills itself in, no star,
+ *   and the next picture comes along.
  *
  * It deliberately does not cover the page. There is no panel, no dimmed
  * backdrop and no pointer events anywhere except the little ✕ (and the answer
@@ -40,11 +42,29 @@ const COLORS = [
 
 /** How long a target takes to vanish, and how long until the next one. */
 const POOF_MS = 420;
+/** …but a right last letter lingers, to show off its gold ring. */
+const WON_MS = 800;
 const SPARKS = 12;
 /** Wrong guesses at a picture before its name is whispered. */
 const HINT_AFTER = 2;
+/** Wrong guesses at a last letter before it counts as a miss. */
+const FAIL_AFTER = 3;
+/** How long a missed answer stays up to be read before the next try. */
+const FAIL_MS = 1600;
 /** Letters to pick from on a touch screen, where there is no keyboard. */
 const CHOICES = 3;
+
+/** Where the gold ring twinkles: spots around its rim, each on its own beat. */
+const RING_TWINKLES = Array.from({ length: 8 }, (unused, i) => {
+  const angle = (Math.PI * 2 * i) / 8 - Math.PI / 2;
+  const reach = i % 2 ? 58 : 52; // % of the ring: some on it, some just past
+  return {
+    left: `${50 + reach * Math.cos(angle)}%`,
+    top: `${50 + reach * Math.sin(angle)}%`,
+    animationDelay: `${120 + ((i * 3) % 8) * 45}ms`,
+    fontSize: i % 2 ? "0.2em" : "0.28em",
+  };
+});
 
 let nextId = 1;
 
@@ -153,9 +173,10 @@ function Poof({ target, picture }) {
  * and waiting until the right key fills it in.
  *
  * @param filled  the word has been answered: show the last letter too
+ * @param missed  …but by running out of guesses, not by the right key
  * @param wrong   a wrong key was just pressed: the empty segment shakes
  */
-function Caterpillar({ word, color, filled, wrong }) {
+function Caterpillar({ word, color, filled, missed, wrong }) {
   const letters = word.toUpperCase().split("");
   const first = Math.max(0, COLORS.indexOf(color));
   return (
@@ -174,7 +195,13 @@ function Caterpillar({ word, color, filled, wrong }) {
           <b
             key={i}
             className={`waiting-caterpillar-segment${
-              last ? (filled ? " is-filled" : " is-asked") : ""
+              last
+                ? filled
+                  ? missed
+                    ? " is-filled is-missed"
+                    : " is-filled"
+                  : " is-asked"
+                : ""
             }`}
             style={
               last && !filled
@@ -214,6 +241,8 @@ export default function WaitingGame({
   const [found, setFound] = useState(0);
   const [wrong, setWrong] = useState(false);
   const [misses, setMisses] = useState(0);
+  // A last letter guessed wrong too often: its answer, shown before moving on.
+  const [failed, setFailed] = useState(null);
   // No keyboard to type on, so the answer has to be something to tap instead.
   const [tappable] = useState(
     () => !!window.matchMedia?.("(pointer: coarse)").matches
@@ -224,7 +253,9 @@ export default function WaitingGame({
   const closeRef = useRef(onClose);
   const hideRef = useRef(onHide);
   const gameRef = useRef(game);
+  const missesRef = useRef(misses);
   useEffect(() => {
+    missesRef.current = misses;
     targetRef.current = target;
     closeRef.current = onClose;
     hideRef.current = onHide;
@@ -251,7 +282,23 @@ export default function WaitingGame({
       if (!current) return; // mid-poof: the target is already gone
 
       if (!current.answers.includes(char)) {
-        // Wrong keys cost nothing. The target just shakes its head.
+        // In the last-letter game the third wrong key is a miss: the answer
+        // fills itself in, quietly, and the next picture takes its place.
+        if (gameRef.current === "last" && missesRef.current + 1 >= FAIL_AFTER) {
+          targetRef.current = null;
+          setTarget(null);
+          setWrong(false);
+          setMisses(0);
+          setFailed(current);
+          later(() => {
+            const next = drawTarget(gameRef.current, current.char);
+            targetRef.current = next;
+            setTarget(next);
+            setFailed(null);
+          }, FAIL_MS);
+          return;
+        }
+        // Otherwise wrong keys cost nothing. The target just shakes its head.
         setWrong(true);
         setMisses((n) => n + 1);
         later(() => setWrong(false), 420);
@@ -269,7 +316,7 @@ export default function WaitingGame({
         targetRef.current = next;
         setTarget(next);
         setPoof(null);
-      }, POOF_MS);
+      }, gameRef.current === "last" ? WON_MS : POOF_MS);
     },
     [later]
   );
@@ -323,7 +370,8 @@ export default function WaitingGame({
       ? `A ${target?.word}. What letter does it ${ends} with?`
       : `Find the letter ${target?.char}`;
   // The caterpillar stays while the answered word poofs, filled in at last.
-  const spelling = spelled && !leaving ? (target ?? poof) : null;
+  // A missed one stays too, with its answer shown.
+  const spelling = spelled && !leaving ? (target ?? poof ?? failed) : null;
 
   return (
     <div
@@ -332,6 +380,37 @@ export default function WaitingGame({
     >
       <div className="waiting-letter-stack">
         {poof && <Poof key={`poof-${poof.id}`} target={poof} picture={picture} />}
+
+        {poof && spelled && (
+          <span
+            key={`won-ring-${poof.id}`}
+            className="waiting-letter-ring is-won"
+            aria-hidden="true"
+          >
+            {RING_TWINKLES.map((t, i) => (
+              <i key={i} style={t} />
+            ))}
+          </span>
+        )}
+
+        {failed && !leaving && (
+          <span
+            key={`missed-ring-${failed.id}`}
+            className="waiting-letter-ring is-missed"
+            aria-hidden="true"
+          />
+        )}
+
+        {failed && !leaving && (
+          <span
+            key={`missed-${failed.id}`}
+            className="waiting-letter-glyph is-picture is-missed"
+            role="img"
+            aria-label={`It was a ${failed.word}, ending in ${failed.answers[0]}.`}
+          >
+            {failed.char}
+          </span>
+        )}
 
         {target &&
           (leaving ? (
@@ -360,13 +439,20 @@ export default function WaitingGame({
           word={spelling.word}
           color={spelling.color}
           filled={!target}
+          missed={spelling === failed}
           wrong={wrong}
         />
       )}
 
       {!leaving && (
         <p className="waiting-letter-pill">
-          <span>{hint ? `It's a ${hint}!` : prompt}</span>
+          <span>
+            {failed
+              ? `It ends with ${failed.answers[0]}!`
+              : hint
+                ? `It's a ${hint}!`
+                : prompt}
+          </span>
           {tappable && picture && target && (
             <span className="waiting-letter-choices">
               {target.choices.map((c) => (
