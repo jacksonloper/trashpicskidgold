@@ -51,6 +51,24 @@ function openDB() {
   return dbPromise;
 }
 
+/**
+ * Ask the browser to keep this site's storage as "persistent" rather than
+ * "best effort". Best-effort storage can be evicted when the disk runs low;
+ * persistent storage is only ever cleared by the user. Chrome decides on its
+ * own (it favours sites that are used a lot, bookmarked or installed),
+ * Firefox asks the user once, and the answer sticks either way, so asking on
+ * every load is harmless. Resolves to whether storage is now persistent.
+ */
+export async function requestPersistentStorage() {
+  try {
+    if (!navigator.storage?.persist) return false;
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
 /* ---- generic helpers ---- */
 
 async function get(storeName, key) {
