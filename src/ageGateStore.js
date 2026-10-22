@@ -19,3 +19,12 @@ export function recordAgreement() {
     /* localStorage unavailable – proceed anyway */
   }
 }
+
+/** Forget the agreement, so the next person sees the entrance page. */
+export function clearAgreement() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* localStorage unavailable */
+  }
+}

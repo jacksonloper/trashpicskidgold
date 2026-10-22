@@ -58,3 +58,12 @@ export function saveSettings(settings) {
     /* localStorage unavailable – the setting still holds until reload */
   }
 }
+
+/** Forget the settings, for a computer the family is leaving. */
+export function clearSettings() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* localStorage unavailable */
+  }
+}

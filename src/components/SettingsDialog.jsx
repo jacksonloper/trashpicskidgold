@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { WAITING_GAMES } from "../settingsStore";
 import DriveBackupSettings from "./DriveBackupSettings";
+import ForgetComputer from "./ForgetComputer";
 
 /**
  * The grown-up's settings: which game the waiting letter plays while a
@@ -65,6 +66,8 @@ export default function SettingsDialog({
         </p>
 
         {drive && <DriveBackupSettings drive={drive} stories={stories} />}
+
+        <ForgetComputer driveConfigured={!!drive?.configured} />
 
         <div className="plan-modal-buttons">
           <button type="button" className="btn-primary" onClick={onPlay}>

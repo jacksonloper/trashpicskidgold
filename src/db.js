@@ -19,7 +19,19 @@ const DB_VERSION = 3;
 
 let dbPromise = null;
 
+/**
+ * Set once "forget everything on this computer" has begun. From then on
+ * nothing in this page may open the database again: a save that was
+ * already scheduled (the autosave debounce, the unload handler), a backup
+ * mid-flight writing its record, any of them would put something back
+ * into a database that is meant to be empty. The page reloads right after.
+ */
+let wiped = false;
+
 function openDB() {
+  if (wiped) {
+    return Promise.reject(new Error("This browser has forgotten the app."));
+  }
   if (dbPromise) return dbPromise;
 
   dbPromise = new Promise((resolve, reject) => {
@@ -603,4 +615,32 @@ export async function clearBackupRecords() {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+/* ---- forgetting this computer ---- */
+
+/**
+ * Empty every store at once: stories, pictures, trash, settings (the API
+ * key among them) and the backup bookkeeping. For a computer the family is
+ * walking away from — a library, a relative's laptop. The copies on Google
+ * Drive are not touched; this is the one thing in the app that destroys
+ * story text, and it is reached only through a typed confirmation.
+ */
+export async function wipeDatabase() {
+  const db = await openDB();
+  // Close the door before emptying the rooms: no other caller gets a
+  // connection from here on, and the one in hand is shut when done.
+  wiped = true;
+  dbPromise = null;
+  const names = Array.from(db.objectStoreNames);
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(names, "readwrite");
+      for (const name of names) tx.objectStore(name).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
 }
