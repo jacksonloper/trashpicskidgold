@@ -279,6 +279,19 @@ each one stands:
 - ⏳ never backed up, edited since its last upload, or not yet hashed by Drive
 - ❌ the last check found a file on Drive that differs from the one here
 
+### When the browser will not save
+
+A save the browser refuses (storage full, a database that would not open)
+used to be a line in the console and nothing else: the words stayed on
+screen, looked saved, and were gone on the next reload. Now the story's
+title in the picker gets a ❗ in place of its backup glyph, whatever Drive
+says, and a red banner with no close button sits under the navbar saying
+the words are on screen only, until a save goes through. The save is tried
+again every five seconds, and the banner suggests the two things that help
+in the meantime: **Export → Download ZIP**, and freeing storage. Writes
+resolve only when their transaction has committed, so a refusal is never
+mistaken for a save.
+
 ### One tab at a time
 
 Stories are kept in the browser, and two tabs of the app would each hold
