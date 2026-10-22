@@ -1,9 +1,9 @@
 /**
  * The thinnest possible Google Drive client: sign-in through Google Identity
- * Services, and the five REST calls sync needs.
+ * Services, and the handful of REST calls the backup needs.
  *
- * Nothing here knows what a story is. It makes folders, moves named blobs in
- * and out of them, and reports what is there.
+ * Nothing here knows what a story is. It makes folders, puts named blobs in
+ * them, and reports what is there. Nothing is ever read back out.
  *
  * Scope is `drive.file`: the app can see and touch only files it created
  * itself, never the rest of the user's Drive. Google classes that scope as
@@ -144,7 +144,7 @@ export async function getAccessToken({ interactive = false } = {}) {
       reject(
         new DriveError(
           blocked
-            ? "Google needs a sign-in to carry on syncing."
+            ? "Google needs a sign-in to carry on backing up."
             : err?.message || "Google sign-in failed.",
           { code: blocked ? "popup" : "signin" }
         )
@@ -289,18 +289,6 @@ export async function listFiles(folderId) {
   return listQuery([`'${folderId}' in parents`, "trashed=false"]);
 }
 
-/**
- * Every live file the app has tagged with a given property value, wherever
- * it sits. One paged request however many stories there are, which is what
- * makes the three-minute check cheap.
- */
-export async function listTagged(key, value) {
-  return listQuery([
-    `appProperties has { key='${esc(key)}' and value='${esc(value)}' }`,
-    "trashed=false",
-  ]);
-}
-
 /** Is this file still live? false when trashed, or gone altogether. */
 export async function isFileLive(fileId) {
   try {
@@ -343,25 +331,3 @@ export async function renameFile(fileId, name) {
   });
 }
 
-/** The file's bytes, as a Blob. */
-export async function downloadFile(fileId) {
-  const res = await request(`${API}/files/${fileId}?alt=media`, { raw: true });
-  return res.blob();
-}
-
-/**
- * Move a file or folder to Drive's trash — a folder takes its contents
- * with it. Never a hard delete: a story a grown-up removed here can still
- * be fished back out of Drive for thirty days.
- */
-export async function trashFile(fileId) {
-  try {
-    await request(`${API}/files/${fileId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trashed: true }),
-    });
-  } catch (e) {
-    if (e.code !== "notfound") throw e; // already gone is fine
-  }
-}

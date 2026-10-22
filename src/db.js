@@ -6,7 +6,7 @@
  *   stories   – { id, title, jsonblob }
  *   images    – { id, storyId, caption, data, characterReferenceId }
  *   trash     – pictures removed from a story, kept until the user empties it
- *   sync      – per-story bookkeeping for Google Drive sync (see driveSync/)
+ *   backup    – per-story bookkeeping for the Google Drive backup (driveBackup/)
  *
  * Pictures cost an API call and minutes of a child's attention, so nothing
  * ever deletes one outright: every path that takes a picture out of a story
@@ -40,8 +40,8 @@ function openDB() {
       if (!db.objectStoreNames.contains("trash")) {
         db.createObjectStore("trash", { keyPath: "id" });
       }
-      if (!db.objectStoreNames.contains("sync")) {
-        db.createObjectStore("sync", { keyPath: "storyId" });
+      if (!db.objectStoreNames.contains("backup")) {
+        db.createObjectStore("backup", { keyPath: "storyId" });
       }
     };
 
@@ -241,19 +241,21 @@ export async function getStory(id) {
 }
 
 /**
- * Every story carries `updatedAt`, stamped on each save. Drive sync compares
- * it with what was last uploaded to tell "edited since" from "untouched"
- * without diffing the whole record.
+ * Every story carries `updatedAt`, stamped on each save. The Drive backup
+ * compares it with the stamp of the last upload to tell "edited since" from
+ * "untouched" without diffing the whole record. Both stamps come from this
+ * machine's clock, and a save never moves the stamp backwards, so a clock
+ * put right can never make an edit look old.
  */
 function stamped(story) {
-  return { ...story, updatedAt: Date.now() };
+  return { ...story, updatedAt: Math.max(Date.now(), (story.updatedAt ?? 0) + 1) };
 }
 
 export async function saveStory(story) {
   await put("stories", stamped(story));
 }
 
-/** Every story record in full, for the sync planner. */
+/** Every story record in full, for the backup. */
 export async function listStoriesFull() {
   return getAll("stories");
 }
@@ -272,23 +274,11 @@ export async function listStoriesFull() {
 export async function deleteStory(id) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(
-      ["images", "stories", "trash", "sync"],
-      "readwrite"
-    );
+    const tx = db.transaction(["images", "stories", "trash"], "readwrite");
     const imgStore = tx.objectStore("images");
     const storyStore = tx.objectStore("stories");
     const trashStore = tx.objectStore("trash");
-    const syncStore = tx.objectStore("sync");
     const snapshot = { story: null, images: [] };
-
-    // A story that has been to Drive leaves a tombstone behind, so the next
-    // sync knows to put the Drive copy in Drive's trash too.
-    const syncReq = syncStore.get(id);
-    syncReq.onsuccess = () => {
-      const rec = syncReq.result;
-      if (rec) syncStore.put({ ...rec, deleted: true, deletedAt: Date.now() });
-    };
 
     // Read the records out before removing them so the caller can undo, and
     // so each trashed picture can carry the title of the story it came from.
@@ -348,10 +338,7 @@ export async function restoreStory(snapshot) {
   if (!snapshot?.story) return;
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(
-      ["images", "stories", "trash", "sync"],
-      "readwrite"
-    );
+    const tx = db.transaction(["images", "stories", "trash"], "readwrite");
     const imgStore = tx.objectStore("images");
     const trashStore = tx.objectStore("trash");
     for (const img of snapshot.images ?? []) {
@@ -359,16 +346,6 @@ export async function restoreStory(snapshot) {
       trashStore.delete(img.id);
     }
     tx.objectStore("stories").put(snapshot.story);
-    // The story is back, so its Drive copy must stay: lift the tombstone.
-    const syncStore = tx.objectStore("sync");
-    const syncReq = syncStore.get(snapshot.story.id);
-    syncReq.onsuccess = () => {
-      const rec = syncReq.result;
-      if (rec?.deleted) {
-        const { deleted: _d, deletedAt: _at, ...kept } = rec;
-        syncStore.put(kept);
-      }
-    };
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -418,7 +395,6 @@ export const TRASH_ORIGINS = {
   page: "its page was removed",
   reference: "its reference graphic was removed",
   replaced: "it was replaced by a new generation",
-  sync: "a newer version of its story came down from Google Drive",
 };
 
 /** Rough size of a data-URL payload, for showing what the trash is holding. */
@@ -549,73 +525,32 @@ export async function emptyTrash() {
   });
 }
 
-/* ---- Google Drive sync bookkeeping ---- */
+/* ---- Google Drive backup bookkeeping ---- */
 
 /**
- * One record per story that has been to Drive:
- *   { storyId, fileId, syncedAt, remoteModified, deleted?, deletedAt? }
+ * One record per story that has been backed up:
+ *   { storyId, folderId, folderName, imagesFolderId, historyFolderId,
+ *     fileId, indexFileId, syncedAt }
  *
- * `syncedAt` is the story's own `updatedAt` as of the last successful sync,
- * and `remoteModified` the Drive file's modifiedTime (ms) at that moment.
- * Comparing each side against its own stamp is how the planner tells which
- * of them has moved since. `deleted` marks a story removed here whose Drive
- * copy has yet to be trashed.
+ * `syncedAt` is the story's own `updatedAt` as of its last upload; a story
+ * whose `updatedAt` has moved past it goes up again. The ids say where on
+ * Drive the story's folder and files are, so an upload can patch them in
+ * place rather than make a second folder.
  */
-export async function listSyncRecords() {
-  return getAll("sync");
+export async function listBackupRecords() {
+  return getAll("backup");
 }
 
-export async function putSyncRecord(record) {
-  await put("sync", record);
+export async function putBackupRecord(record) {
+  await put("backup", record);
 }
 
-export async function deleteSyncRecord(storyId) {
-  return del("sync", storyId);
-}
-
-/** Forget everything about Drive: next sync starts from a clean slate. */
-export async function clearSyncRecords() {
+/** Forget everything about Drive: the next backup uploads every story afresh. */
+export async function clearBackupRecords() {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction("sync", "readwrite");
-    tx.objectStore("sync").clear();
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-/**
- * Write a story that arrived from Drive, in one transaction with its images
- * and its sync record.
- *
- * Unlike `saveStory` this keeps the `updatedAt` the caller supplies, so the
- * story does not look freshly edited and get uploaded straight back. Pictures
- * the previous local version referred to and the new one does not go to the
- * trash, like every other picture that leaves a story.
- */
-export async function applyRemoteStory({ story, images, syncRecord, retiredImageIds }) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(
-      ["images", "stories", "trash", "sync"],
-      "readwrite"
-    );
-    const imgStore = tx.objectStore("images");
-    const trashStore = tx.objectStore("trash");
-    for (const img of images ?? []) imgStore.put(img);
-    for (const id of retiredImageIds ?? []) {
-      const req = imgStore.get(id);
-      req.onsuccess = () => {
-        const image = req.result;
-        if (!image) return;
-        trashStore.put(
-          toTrashRecord(image, { origin: "sync", storyTitle: story.title })
-        );
-        imgStore.delete(id);
-      };
-    }
-    tx.objectStore("stories").put(story);
-    tx.objectStore("sync").put(syncRecord);
+    const tx = db.transaction("backup", "readwrite");
+    tx.objectStore("backup").clear();
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

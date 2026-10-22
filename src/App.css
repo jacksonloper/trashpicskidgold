@@ -1859,7 +1859,7 @@
   font-size: 0.9em;
 }
 
-.drive-indicator-syncing {
+.drive-indicator-backing-up {
   animation: drive-pulse 1.2s ease-in-out infinite;
 }
 

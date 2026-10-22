@@ -1,10 +1,11 @@
 /**
- * The Google Drive part of the settings dialog: connect, disconnect, sync
- * now, and a line saying how it is going.
+ * The Google Drive part of the settings dialog: connect, disconnect, back
+ * up now, and a line saying how it is going.
  *
- * Deliberately plain. The decisions a grown-up makes here are "yes, keep a
- * copy of these stories in my Drive" and "stop" — everything else is
- * automatic, and the words below say so.
+ * Deliberately plain. The decision a grown-up makes here is "yes, keep a
+ * copy of these stories in my Drive" or "stop" — everything else is
+ * automatic, and the words below say so. Nothing on this panel can change
+ * a story: the backup only ever writes to Drive.
  */
 
 function relative(ts) {
@@ -20,25 +21,18 @@ function relative(ts) {
 
 function describe(summary) {
   if (!summary) return null;
-  const bits = [];
-  const n = (count, one, many) =>
-    count > 0 && bits.push(`${count} ${count === 1 ? one : many}`);
-  n(summary.uploaded, "story sent up", "stories sent up");
-  n(summary.downloaded, "story brought down", "stories brought down");
-  n(summary.copies, "copy made from a clash", "copies made from clashes");
-  n(summary.trashedRemote, "story trashed on Drive", "stories trashed on Drive");
-  n(summary.deletedLocal, "story removed here", "stories removed here");
-  return bits.length ? `Last time: ${bits.join(", ")}.` : "Last time: nothing had changed.";
+  if (summary.uploaded === 0) return "Last time: nothing had changed.";
+  return `Last time: ${summary.uploaded} ${summary.uploaded === 1 ? "story" : "stories"} sent up.`;
 }
 
-export default function DriveSyncSettings({ drive }) {
-  const { configured, enabled, status, error, summary, progress, lastSyncAt } =
+export default function DriveBackupSettings({ drive }) {
+  const { configured, enabled, status, error, summary, progress, lastBackupAt } =
     drive;
 
   if (!configured) {
     return (
       <fieldset className="settings-group">
-        <legend className="plan-label">Google Drive</legend>
+        <legend className="plan-label">Google Drive backup</legend>
         <p className="settings-note">
           Not set up on this build. A copy of the app with a Google OAuth
           client id (<code>VITE_GOOGLE_CLIENT_ID</code>) can keep every story
@@ -48,21 +42,22 @@ export default function DriveSyncSettings({ drive }) {
     );
   }
 
-  const busy = status === "syncing";
+  const busy = status === "backing-up";
 
   return (
     <fieldset className="settings-group">
-      <legend className="plan-label">Google Drive</legend>
+      <legend className="plan-label">Google Drive backup</legend>
 
       {!enabled ? (
         <>
           <p className="settings-note">
             Keep a copy of every story in a <strong>Story Maker</strong>{" "}
             folder in your Google Drive: one folder per story, laid out like
-            an unpacked Export ZIP, each picture sent up once and every version of
-            the words kept. Stories made on
-            another computer signed in to the same Drive come here too. The
-            app can only see files it made itself.
+            an unpacked Export ZIP, each picture sent up once and every
+            version of the words kept. Drive is only ever written to — nothing
+            here is changed by it — and the app can only see files it made
+            itself. To restore, download a story&rsquo;s folder from Drive as
+            a ZIP and hand it to Import.
           </p>
           <div className="plan-modal-buttons settings-drive-buttons">
             <button
@@ -78,17 +73,18 @@ export default function DriveSyncSettings({ drive }) {
         <>
           <p className="settings-note">
             <span className={`drive-status drive-status-${status}`}>
-              {status === "syncing" &&
+              {status === "backing-up" &&
                 (progress
-                  ? `Syncing… ${progress.done} of ${progress.total}`
-                  : "Syncing…")}
-              {status === "idle" && `Synced ${relative(lastSyncAt)}.`}
+                  ? `Backing up… ${progress.done} of ${progress.total}`
+                  : "Backing up…")}
+              {status === "idle" && `Backed up ${relative(lastBackupAt)}.`}
               {status === "signin" &&
-                "Google needs you to sign in again before the next sync."}
-              {status === "error" && `Last sync did not finish${lastSyncAt ? ` (last good one ${relative(lastSyncAt)})` : ""}.`}
+                "Google needs you to sign in again before the next backup."}
+              {status === "error" &&
+                `Last backup did not finish${lastBackupAt ? ` (last good one ${relative(lastBackupAt)})` : ""}.`}
               {status === "off" && "Connecting…"}
             </span>
-            {status !== "syncing" && summary && (
+            {status !== "backing-up" && summary && (
               <>
                 <br />
                 <small>{describe(summary)}</small>
@@ -100,9 +96,9 @@ export default function DriveSyncSettings({ drive }) {
               type="button"
               className="btn-primary"
               disabled={busy}
-              onClick={() => drive.syncNow({ interactive: true })}
+              onClick={() => drive.backUpNow({ interactive: true })}
             >
-              {status === "signin" ? "Sign in and sync" : "Sync now"}
+              {status === "signin" ? "Sign in and back up" : "Back up now"}
             </button>
             <button
               type="button"
@@ -115,7 +111,7 @@ export default function DriveSyncSettings({ drive }) {
           </div>
           <p className="settings-note">
             <small>
-              Disconnecting stops the syncing and nothing else: the stories
+              Disconnecting stops the backups and nothing else: the stories
               here and the files in Drive both stay where they are.
             </small>
           </p>

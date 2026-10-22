@@ -17,7 +17,7 @@ import WaitingGame from "./components/WaitingGame";
 import ErrorDetailsModal from "./components/ErrorDetailsModal";
 import SettingsDialog from "./components/SettingsDialog";
 import { loadSettings, saveSettings } from "./settingsStore";
-import useDriveSync from "./driveSync/useDriveSync";
+import useDriveBackup from "./driveBackup/useDriveBackup";
 import {
   buildRefGraphicPrompt,
   planIllustration,
@@ -276,7 +276,6 @@ export default function App() {
   const [trashPickSectionId, setTrashPickSectionId] = useState(null); // picker
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
   const [revealRequest, setRevealRequest] = useState(null); // { id } to show
-  const [storyReloadTick, setStoryReloadTick] = useState(0); // Drive replaced it
 
   const dirtyStoryRef = useRef(null);
   const saveTimerRef = useRef(null);
@@ -413,38 +412,11 @@ export default function App() {
     };
   }, [flushSave]);
 
-  /* ---- Google Drive sync ---- */
+  /* ---- Google Drive backup ---- */
 
-  const isStoryDirty = useCallback((id) => dirtyStoryRef.current?.id === id, []);
-
-  /**
-   * A sync changed the database underneath the app: stories came down,
-   * copies were made, or a story trashed on Drive was removed here. Reread
-   * the list, and the open story if it was one of them — unless it has
-   * unsaved typing, which the sync itself already steered around.
-   */
-  const handleSyncApplied = useCallback(
-    async ({ changedStoryIds, deletedStoryIds }) => {
-      const list = await listStories();
-      setStoryList(list);
-      setActiveStoryId((current) => {
-        if (current && deletedStoryIds.includes(current)) {
-          return list.length > 0 ? list[0].id : null;
-        }
-        if (current && changedStoryIds.includes(current)) {
-          if (!dirtyStoryRef.current) setStoryReloadTick((t) => t + 1);
-        }
-        return current;
-      });
-    },
-    []
-  );
-
-  const drive = useDriveSync({
-    flushSave,
-    isDirty: isStoryDirty,
-    onApplied: handleSyncApplied,
-  });
+  // Write-only: whatever has changed goes up every few minutes. Nothing is
+  // ever read back, so no backup can touch a story in this browser.
+  const drive = useDriveBackup({ flushSave });
 
   /* ---- load active story ---- */
 
@@ -485,8 +457,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-    // storyReloadTick: a sync brought a newer version of this story down.
-  }, [activeStoryId, storyReloadTick]);
+  }, [activeStoryId]);
 
   /* ---- the open section's illustration, loaded on demand ---- */
 

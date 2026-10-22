@@ -14,7 +14,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Failures that explain themselves** — when a picture doesn't arrive, the red banner says what happened in one line and **What happened?** opens the reply behind it: which filter stopped it, what Gemini wrote instead, what to try
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
-- **Google Drive sync** — optional: every story is kept in a *Story Maker* folder in your Drive, laid out like an unpacked Export ZIP with each picture sent up once, and stories from another computer on the same Drive come here
+- **Google Drive backup** — optional and write-only: every few minutes whatever changed is written to a *Story Maker* folder in your Drive, laid out so a story's folder zips straight back into Import, with each picture sent once and every version of the words kept
 - **Netlify-ready** — deploys with `netlify.toml` included
 
 ## The waiting letter
@@ -153,7 +153,8 @@ first if you want it in the bundle.
 ## Story bundles
 
 Stories live only in the browser's IndexedDB, so the ZIP that **Export → Download
-ZIP** produces is the only backup there is. **Import** in the navbar reads those
+ZIP** produces is the backup you hold in your hand (the Google Drive backup
+below is the other). **Import** in the navbar reads those
 same ZIPs back — pick several at once to restore a whole shelf of stories.
 
 The layout (`src/storyBundle.js` is the single source of truth for both
@@ -182,80 +183,70 @@ Import rules worth knowing:
   `jsonblob` in `story.json` and no `images.json`; their images are matched back
   by the ordinal prefix in each filename, and the title is read from `story.md`.
 
-## Google Drive sync
+## Google Drive backup
 
-Stories still live in the browser's IndexedDB, but **⚙️ Settings → Connect
-Google Drive** keeps a copy of each one in a *Story Maker* folder in the
-grown-up's Google Drive, and brings back whatever another computer signed in
-to the same Drive has put there. Each story is a folder laid out exactly like
-an Export ZIP, unpacked:
+Stories live in the browser's IndexedDB, and the ZIP that Export produces was
+the only backup there was. **⚙️ Settings → Connect Google Drive** adds
+another: every few minutes, whatever has changed is written to a *Story
+Maker* folder in the grown-up's Google Drive. Drive is only ever written to.
+Nothing is read back, so no backup can change, overwrite or remove a story
+in the browser, and there is no sync to reason about.
+
+Each story is a folder laid out like an Export ZIP, unpacked:
 
 ```
 Story Maker/
-  my-story/
+  the-dog/
     story.json      { formatVersion, id, title, jsonblob }
     images.json     [ { id, storyId, caption, characterReferenceId, file } ]
     images/
-      the_dog_1a2b3c4d.png …
+      A_dog_1a2b3c4d.png …
     history/
       2026-10-22T01-02-03Z.json …
 ```
 
-A picture never changes once it has an id, so each one goes up once and is
-never sent again: adding an illustration to a seventy-page story uploads one
-picture and two small JSON files, not the other sixty-nine pictures.
+That layout is the point. **To restore a story, download its folder from
+Drive as a ZIP and hand it to Import**: `story.json` and `images.json` are
+what Import reads (`src/storyBundle.js` is still the one definition of the
+format), and `history/` it ignores. Import looks through the single wrapping
+directory Drive puts in a folder download.
 
-`story.json` is the head, and the only thing sync reads back. Every upload
-first drops the same text into `history/` under the time it was saved, and
-those are never overwritten: the words of a story are small, so every version
-there has ever been is kept, and a page a child dictated last month can still
-be read even after it was rewritten. The folder, downloaded from Drive as a
-ZIP, is something Import reads (it takes `story.json` and `images/`, and
-ignores `history/`), so the Drive copy is also a backup anyone can restore by
-hand.
+The folder differs from a ZIP in two ways, both deliberate:
 
-Once connected, the open tab syncs every three minutes, whenever it comes back
-into view, and on **Sync now**. Nothing in the kid's half of the app changes:
+- **Each picture is sent once.** A picture never changes once it has an id,
+  so the backup uploads only the ones Drive does not already hold. Adding an
+  illustration to a seventy-page story sends one picture and two small JSON
+  files, not the other sixty-nine pictures.
+- **Every version of the words is kept.** Each upload first drops the story's
+  text into `history/` under the time it was saved, and those files are never
+  overwritten. The text is small (pictures are by id), so keeping all of it
+  costs nothing, and a page a child dictated last month can still be read
+  after it was rewritten. `story.json` is always the latest.
+
+Each story carries an `updatedAt` stamp, restamped on every save and never
+moved backwards, and a `backup` store in IndexedDB remembers, per story, the
+stamp as of its last upload and where its folder and files are on Drive. A
+story whose stamp has moved goes up again; `story.json` is written last, so a
+folder that has one is a complete bundle. Deleting a story here leaves its
+folder on Drive alone — that is what a backup is for. Connecting a different
+Google account forgets the bookkeeping and sends every story up afresh. The
+trash is not backed up, and neither is the API key.
+
+Once connected, the open tab backs up every three minutes, whenever it is
+hidden, and on **Back up now**. Nothing in the kid's half of the app changes:
 no dialog, no spinner, just a small ☁️ beside Settings that goes amber when
 Google wants a grown-up to sign in again.
-
-How a sync decides what to do (`src/driveSync/planSync.js`, which is pure and
-has no idea what Drive is):
-
-| Here | On Drive | What happens |
-| --- | --- | --- |
-| new or edited | untouched | sent up |
-| untouched | newer | brought down, replacing the local one |
-| edited | also edited | the Drive one comes in as a separate *(Drive copy)*, the local one goes up — nothing is thrown away |
-| deleted | untouched | the Drive file goes to Drive's trash (recoverable for 30 days) |
-| deleted | edited since | it comes back down as a story again |
-| untouched | trashed or gone | removed here; its pictures go to the local trash |
-| edited | trashed or gone | sent up again as a new file |
-
-Each story carries an `updatedAt` stamp, and a `sync` store in IndexedDB
-remembers, per story, the stamp and its `story.json`'s modified time on Drive
-as of the last successful sync (plus which folder and files are its). One
-request lists every `story.json` the app has made, however many stories there
-are, so the three-minute check is cheap; `story.json` is written last in an
-upload, so nothing in a finished folder is newer than the stamp. A side has "moved" when its stamp is newer than that.
-A story being typed in at the moment a download would land is skipped until
-the next sync, so a keystroke is never written over. Before a story is removed
-here because Drive no longer lists it, the file is asked for by id — a listing
-that merely missed it is not a deletion. If the whole *Story Maker* folder has
-been trashed, the sync records are wiped and every local story goes up fresh.
-
-The trash is not synced, and neither is the API key.
 
 ### One tab at a time
 
 Stories are kept in the browser, and two tabs of the app would each hold
 their own copy of the open story, the later autosave winning, and would each
-run their own sync. So the app runs in one tab: the first takes a browser
-lock (`src/useSingleTab.js`, the Web Locks API, mounted from `src/Root.jsx`) and keeps it until it closes,
-and any other tab is shown a notice instead of the app, with a **Use this tab
-instead** button that takes the lock over and puts the first tab behind the
-same notice. The app is never mounted in a tab standing aside, so no timer
-of any kind runs there.
+run their own backups. So the app runs in one tab: the first takes a browser
+lock (`src/useSingleTab.js`, the Web Locks API, mounted from `src/Root.jsx`)
+and keeps it until it closes, and any other tab is shown a notice instead of
+the app, with a **Use this tab instead** button that takes the lock over and
+puts the first tab behind the same notice. The app is never mounted in a tab
+standing aside, so no timer of any kind runs there.
 
 ### Setting it up
 
@@ -278,8 +269,8 @@ no API key — only an OAuth client id.
    development (see `.env.example`), and on Netlify under *Site configuration
    → Environment variables*, then redeploy.
 
-Without that variable the Drive section of Settings explains that sync is not
-set up on this build, and everything else works as before.
+Without that variable the Drive section of Settings explains that backup is
+not set up on this build, and everything else works as before.
 
 ## Getting Started
 

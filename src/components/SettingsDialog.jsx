@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 import { WAITING_GAMES } from "../settingsStore";
-import DriveSyncSettings from "./DriveSyncSettings";
+import DriveBackupSettings from "./DriveBackupSettings";
 
 /**
  * The grown-up's settings: which game the waiting letter plays while a
- * picture is being made, and whether the stories are kept in Google Drive.
+ * picture is being made, and whether the stories are backed up to Google Drive.
  *
  * Escape or a click outside closes it. A change takes effect as soon as it is
  * clicked — there is nothing to save, and nothing here can lose work. Free
@@ -63,7 +63,7 @@ export default function SettingsDialog({
           <kbd>Esc</kbd> or its ✕ ends it.
         </p>
 
-        {drive && <DriveSyncSettings drive={drive} />}
+        {drive && <DriveBackupSettings drive={drive} />}
 
         <div className="plan-modal-buttons">
           <button type="button" className="btn-primary" onClick={onPlay}>

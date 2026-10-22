@@ -100,10 +100,10 @@ export default function Navbar({
           type="button"
           className="btn-small"
           onClick={onOpenSettings}
-          title="Choose which game is played while a picture is being made, and whether stories are kept in Google Drive"
+          title="Choose which game is played while a picture is being made, and whether stories are backed up to Google Drive"
         >
           ⚙️ Settings
-          {/* A small cloud says the stories are going to Drive, and goes
+          {/* A small cloud says the stories are being backed up to Drive, and goes
               amber or red when Google wants something from a grown-up. */}
           {driveStatus && driveStatus !== "off" && driveStatus !== "unconfigured" && (
             <span
