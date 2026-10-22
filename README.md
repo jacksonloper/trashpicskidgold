@@ -14,6 +14,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Failures that explain themselves** — when a picture doesn't arrive, the red banner says what happened in one line and **What happened?** opens the reply behind it: which filter stopped it, what Gemini wrote instead, what to try
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
+- **Google Drive sync** — optional: every story is kept as one of those same ZIPs in a *Story Maker* folder in your Drive, and stories from another computer on the same Drive come here
 - **Netlify-ready** — deploys with `netlify.toml` included
 
 ## The waiting letter
@@ -180,6 +181,68 @@ Import rules worth knowing:
 - **Older ZIPs still load.** Bundles exported before Import existed had a bare
   `jsonblob` in `story.json` and no `images.json`; their images are matched back
   by the ordinal prefix in each filename, and the title is read from `story.md`.
+
+## Google Drive sync
+
+Stories still live in the browser's IndexedDB, but **⚙️ Settings → Connect
+Google Drive** keeps a copy of each one in a *Story Maker* folder in the
+grown-up's Google Drive, and brings back whatever another computer signed in
+to the same Drive has put there. The files are the same ZIPs that Export
+produces, one per story, so a Drive folder full of them is also a backup
+anyone can Import by hand.
+
+Once connected, the open tab syncs every three minutes, whenever it comes back
+into view, and on **Sync now**. Nothing in the kid's half of the app changes:
+no dialog, no spinner, just a small ☁️ beside Settings that goes amber when
+Google wants a grown-up to sign in again.
+
+How a sync decides what to do (`src/driveSync/planSync.js`, which is pure and
+has no idea what Drive is):
+
+| Here | On Drive | What happens |
+| --- | --- | --- |
+| new or edited | untouched | sent up |
+| untouched | newer | brought down, replacing the local one |
+| edited | also edited | the Drive one comes in as a separate *(Drive copy)*, the local one goes up — nothing is thrown away |
+| deleted | untouched | the Drive file goes to Drive's trash (recoverable for 30 days) |
+| deleted | edited since | it comes back down as a story again |
+| untouched | trashed or gone | removed here; its pictures go to the local trash |
+| edited | trashed or gone | sent up again as a new file |
+
+Each story carries an `updatedAt` stamp, and a `sync` store in IndexedDB
+remembers, per story, the stamp and the Drive file's modified time as of the
+last successful sync. A side has "moved" when its stamp is newer than that.
+A story being typed in at the moment a download would land is skipped until
+the next sync, so a keystroke is never written over. Before a story is removed
+here because Drive no longer lists it, the file is asked for by id — a listing
+that merely missed it is not a deletion. If the whole *Story Maker* folder has
+been trashed, the sync records are wiped and every local story goes up fresh.
+
+The trash is not synced, and neither is the API key.
+
+### Setting it up
+
+The app uses the `drive.file` scope: it can only see files it created itself.
+Google classes that as non-sensitive, so there is no verification review, and
+no API key — only an OAuth client id.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) create a
+   project (or pick one) and enable the **Google Drive API**
+   (*APIs & Services → Library*).
+2. *APIs & Services → OAuth consent screen*: external, give it a name and your
+   email. Add the scope `…/auth/drive.file`. Either add yourself (and the
+   other grown-ups) as **test users**, or **Publish** the app — with only
+   non-sensitive scopes, publishing needs no review.
+3. *APIs & Services → Credentials → Create credentials → OAuth client ID*,
+   type **Web application**. Under *Authorised JavaScript origins* add every
+   origin the app is served from, e.g. `http://localhost:5173` and
+   `https://main--trashpicskidgold.netlify.app`. No redirect URIs are needed.
+4. Put the client id in `VITE_GOOGLE_CLIENT_ID`: in `.env.local` for
+   development (see `.env.example`), and on Netlify under *Site configuration
+   → Environment variables*, then redeploy.
+
+Without that variable the Drive section of Settings explains that sync is not
+set up on this build, and everything else works as before.
 
 ## Getting Started
 
