@@ -842,13 +842,130 @@ export default function App() {
     [updateStory]
   );
 
+  /* ---- putting a finished picture where it belongs ---- */
+
+  // The story on screen, readable from inside a wait that started long ago.
+  const storyRef = useRef(null);
+  useEffect(() => {
+    storyRef.current = story;
+  }, [story]);
+
+  /**
+   * Put a finished picture on the page, or the reference graphic, that asked
+   * for it — in whichever story that is.
+   *
+   * A picture takes a minute to come back, and turning to another story in
+   * the meantime does not mean "never mind". So the result is addressed to
+   * the story by id: the one on screen takes it through the usual autosave;
+   * one the grown-up has turned away from is read from the database, given
+   * the picture, and written straight back. Either way the old picture goes
+   * to the trash only after the new reference is on disk, so a crash in
+   * between can never leave a page pointing at the trash.
+   *
+   * `where` is { sectionId } or { rgId, prompt }. Returns
+   *   { placed: true, replaced, title }   the picture is on its page
+   *   { placed: false, title }            the page or reference is gone
+   *   { placed: false, gone: true }       the whole story is gone
+   */
+  const placePicture = useCallback(
+    async (storyId, imgId, where) => {
+      const patch = (s) => {
+        const blob = s.jsonblob;
+        if (where.sectionId) {
+          const sec = blob.sections.find((x) => x.id === where.sectionId);
+          if (!sec) return { found: false };
+          return {
+            found: true,
+            replaced: sec.imageId ?? null,
+            next: {
+              ...s,
+              jsonblob: {
+                ...blob,
+                sections: blob.sections.map((x) =>
+                  x.id === where.sectionId ? { ...x, imageId: imgId } : x
+                ),
+              },
+            },
+          };
+        }
+        const rg = (blob.referenceGraphics ?? []).find((x) => x.id === where.rgId);
+        if (!rg) return { found: false };
+        return {
+          found: true,
+          replaced: rg.imageId ?? null,
+          next: {
+            ...s,
+            jsonblob: {
+              ...blob,
+              referenceGraphics: blob.referenceGraphics.map((x) =>
+                x.id === where.rgId
+                  ? {
+                      ...x,
+                      imageId: imgId,
+                      ...(where.prompt !== undefined ? { prompt: where.prompt } : {}),
+                    }
+                  : x
+              ),
+            },
+          },
+        };
+      };
+
+      const onScreen = storyRef.current;
+      if (onScreen?.id === storyId) {
+        const r = patch(onScreen);
+        if (!r.found) return { placed: false, title: onScreen.title };
+        updateStory((prev) => patch(prev).next ?? prev);
+        // Let React apply the update and mark the story dirty, then write
+        // it, so the old picture is not trashed ahead of its replacement.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await flushSave();
+        return { placed: true, replaced: r.replaced, title: onScreen.title };
+      }
+
+      const stored = await getStory(storyId);
+      if (!stored) return { placed: false, gone: true };
+      const current = migrateStory(stored);
+      const r = patch(current);
+      if (!r.found) return { placed: false, title: current.title };
+      const saved = await saveStory(r.next);
+      setStoryList((prev) =>
+        prev.map((x) =>
+          x.id === storyId ? { ...x, updatedAt: saved.updatedAt } : x
+        )
+      );
+      return { placed: true, replaced: r.replaced, title: current.title };
+    },
+    [flushSave, updateStory]
+  );
+
+  /**
+   * After `placePicture`: the old picture to the trash, or — when the page
+   * or story it was for no longer exists — the new one, so that a paid
+   * picture is never left in the database attached to nothing.
+   */
+  const settlePicture = useCallback(
+    async (result, imgId, fallbackTitle) => {
+      if (result.placed) {
+        await trashPicture(result.replaced, "replaced", result.title);
+      } else {
+        await trashPicture(
+          imgId,
+          result.gone ? "story" : "page",
+          result.title ?? fallbackTitle
+        );
+      }
+    },
+    [trashPicture]
+  );
+
   const handleGenerateRefGraphic = useCallback(
     async (rgId, kind, userPrompt, imageModel, label) => {
       if (!story) return;
       setError(null);
-      // Whatever is on this reference now is about to be replaced; hold on to
-      // its id so the old picture can go to the trash rather than nowhere.
-      const replaced = referenceGraphics.find((rg) => rg.id === rgId)?.imageId;
+      // The story that asked, held by id: the grown-up may be elsewhere by
+      // the time the picture comes back.
+      const owner = { id: story.id, title: story.title };
       setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
       try {
         const prompt = buildRefGraphicPrompt(style, kind, userPrompt, label);
@@ -856,63 +973,46 @@ export default function App() {
         const imgId = newImageId();
         await saveImage({
           id: imgId,
-          storyId: story.id,
+          storyId: owner.id,
           caption: userPrompt.slice(0, 120),
           data: dataUrl,
         });
         setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
-
-        updateStory((s) => ({
-          ...s,
-          jsonblob: {
-            ...s.jsonblob,
-            referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
-              rg.id === rgId
-                ? { ...rg, imageId: imgId, prompt: userPrompt }
-                : rg
-            ),
-          },
-        }));
-        await trashPicture(replaced, "replaced", story.title);
+        const result = await placePicture(owner.id, imgId, {
+          rgId,
+          prompt: userPrompt,
+        });
+        await settlePicture(result, imgId, owner.title);
       } catch (err) {
         setError(asSnack(err));
       } finally {
         setGeneratingRefIds((prev) => ({ ...prev, [rgId]: false }));
       }
     },
-    [apiKey, referenceGraphics, style, story, trashPicture, updateStory]
+    [apiKey, placePicture, settlePicture, style, story]
   );
 
   const handleUploadRefGraphic = useCallback(
     async (rgId, dataUrl) => {
       if (!story) return;
       setError(null);
-      const replaced = referenceGraphics.find((rg) => rg.id === rgId)?.imageId;
+      const owner = { id: story.id, title: story.title };
       try {
         const imgId = newImageId();
         await saveImage({
           id: imgId,
-          storyId: story.id,
+          storyId: owner.id,
           caption: "Uploaded reference",
           data: dataUrl,
         });
         setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
-
-        updateStory((s) => ({
-          ...s,
-          jsonblob: {
-            ...s.jsonblob,
-            referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
-              rg.id === rgId ? { ...rg, imageId: imgId } : rg
-            ),
-          },
-        }));
-        await trashPicture(replaced, "replaced", story.title);
+        const result = await placePicture(owner.id, imgId, { rgId });
+        await settlePicture(result, imgId, owner.title);
       } catch (err) {
         setError(asSnack(err));
       }
     },
-    [referenceGraphics, story, trashPicture, updateStory]
+    [placePicture, settlePicture, story]
   );
 
   /* ---- keeping the open section in view ---- */
@@ -1125,22 +1225,23 @@ export default function App() {
       const sec = sections.find((x) => x.id === sectionId);
       if (!sec || !story) return;
       setError(null);
+      const owner = { id: story.id, title: story.title };
       try {
         const imgId = newImageId();
         await saveImage({
           id: imgId,
-          storyId: story.id,
+          storyId: owner.id,
           caption: sec.caption ?? "",
           data: dataUrl,
         });
         setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
-        updateSectionField(sectionId, "imageId", imgId);
-        await trashPicture(sec.imageId, "replaced", story.title);
+        const result = await placePicture(owner.id, imgId, { sectionId });
+        await settlePicture(result, imgId, owner.title);
       } catch (err) {
         setError(asSnack(err, "Could not put that picture on the page: "));
       }
     },
-    [sections, story, trashPicture, updateSectionField]
+    [placePicture, sections, settlePicture, story]
   );
 
   /* ---- section navigation ---- */
@@ -1489,6 +1590,10 @@ export default function App() {
       if (!story) return { ok: false, error: null };
       await flushSave();
       setError(null);
+      // The story that asked, held by id. Turning to another story while
+      // the picture is drawn does not mean "never mind": it lands on this
+      // page wherever the grown-up has got to.
+      const owner = { id: story.id, title: story.title };
       setGeneratingSections((prev) => ({ ...prev, [sectionId]: true }));
 
       try {
@@ -1515,19 +1620,19 @@ export default function App() {
         const previous = sections.find((x) => x.id === sectionId);
         await saveImage({
           id: imgId,
-          storyId: story.id,
+          storyId: owner.id,
           caption: previous?.caption,
           data: dataUrl,
         });
 
         setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
-        // Dropped harmlessly if the page was removed while this was in flight.
-        updateSectionField(sectionId, "imageId", imgId);
         // Re-generating a page is the quietest way to lose a picture: no
         // dialog, no toast, the old one simply stops being shown. It goes to
-        // the trash like any other removal. (Already trashed, if the page was
-        // removed mid-flight — filing it twice is a no-op.)
-        await trashPicture(previous?.imageId, "replaced", story.title);
+        // the trash like any other removal, once the new one is on disk; and
+        // if the page itself was removed mid-flight, the new picture goes to
+        // the trash instead of lying in the database attached to nothing.
+        const result = await placePicture(owner.id, imgId, { sectionId });
+        await settlePicture(result, imgId, owner.title);
         return { ok: true, error: null };
       } catch (err) {
         setError(asSnack(err));
@@ -1536,15 +1641,7 @@ export default function App() {
         setGeneratingSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [
-      apiKey,
-      allImages,
-      flushSave,
-      sections,
-      story,
-      trashPicture,
-      updateSectionField,
-    ]
+    [apiKey, allImages, flushSave, placePicture, sections, settlePicture, story]
   );
 
   /** Plan only, then open the review modal. */
