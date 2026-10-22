@@ -245,6 +245,33 @@ hidden, and on **Back up now**. Nothing in the kid's half of the app changes:
 no dialog, no spinner, just a small ☁️ beside Settings that goes amber when
 Google wants a grown-up to sign in again.
 
+### Verified against Drive
+
+The backup never reads a file back, but it does check that what landed is
+what was sent. Drive computes a SHA-256 of every file it holds and reports
+it in a listing (`sha256Checksum`, metadata only). After each upload the
+app lists the story's folder and compares that checksum, for `story.json`,
+`images.json` and every picture the story refers to, with the SHA-256 of the
+exact bytes it uploaded; a picture that is missing counts as different.
+The result goes into the story's backup record (`verifiedAt`, `mismatches`),
+and a **tree hash** over all of them is written onto the story folder as the
+`storymakerTreeHash` tag: the SHA-256 of the lines `path<TAB>sha256`, sorted
+by path (`src/driveBackup/hashing.js`), so anyone holding the folder can
+recompute it. Drive sometimes takes a moment to hash a fresh upload; the
+app waits and lists once more, and if a checksum is still missing the story
+is simply "not yet checked", never wrong.
+
+A difference is not a failed backup: the files went up, but the record says
+one of them is not what it should be, and the next backup sends that story
+again, trashing a picture whose checksum differs and uploading a fresh copy.
+**Verify backups** in Settings runs the same comparison over every story
+without uploading anything. With the backup on, the story list shows where
+each one stands:
+
+- ✅ sent, and every file's checksum on Drive matches the file here
+- ⏳ never backed up, edited since its last upload, or not yet hashed by Drive
+- ❌ the last check found a file on Drive that differs from the one here
+
 ### One tab at a time
 
 Stories are kept in the browser, and two tabs of the app would each hold

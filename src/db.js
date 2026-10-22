@@ -265,9 +265,10 @@ export function migrateStory(story) {
   return changed ? { ...story, jsonblob: blob } : story;
 }
 
+/** The story index: id, title, and `updatedAt` so the backup glyph can tell "sent" from "edited since". */
 export async function listStories() {
   const all = await getAll("stories");
-  return all.map((s) => ({ id: s.id, title: s.title }));
+  return all.map((s) => ({ id: s.id, title: s.title, updatedAt: s.updatedAt ?? 0 }));
 }
 
 export async function getStory(id) {
@@ -285,8 +286,11 @@ function stamped(story) {
   return { ...story, updatedAt: Math.max(Date.now(), (story.updatedAt ?? 0) + 1) };
 }
 
+/** Save, and return the record as stored (with its new `updatedAt`). */
 export async function saveStory(story) {
-  await put("stories", stamped(story));
+  const next = stamped(story);
+  await put("stories", next);
+  return next;
 }
 
 /** Every story record in full, for the backup. */
@@ -564,12 +568,17 @@ export async function emptyTrash() {
 /**
  * One record per story that has been backed up:
  *   { storyId, folderId, folderName, imagesFolderId, historyFolderId,
- *     fileId, indexFileId, syncedAt }
+ *     fileId, indexFileId, syncedAt, treeHash, verifiedAt, mismatches }
  *
  * `syncedAt` is the story's own `updatedAt` as of its last upload; a story
  * whose `updatedAt` has moved past it goes up again. The ids say where on
  * Drive the story's folder and files are, so an upload can patch them in
- * place rather than make a second folder.
+ * place rather than make a second folder. The last three are the check
+ * made after each upload, by Drive's own checksums: `mismatches` lists the
+ * files on Drive that differ from the ones here (empty when all agree),
+ * `verifiedAt` is when they were last all found to agree (null while Drive
+ * has not yet hashed something), and `treeHash` is one hash over them all
+ * (see driveBackup/hashing.js).
  */
 export async function listBackupRecords() {
   return getAll("backup");

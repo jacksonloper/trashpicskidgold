@@ -26,6 +26,13 @@
  *
  * Every story is independent and failures are collected, not thrown: one
  * story whose upload fails must not stop the other nine from going up.
+ *
+ * After each upload the folder is checked, still without reading a byte
+ * back: Drive reports a SHA-256 for every file it holds, and that is
+ * compared with the hash of the bytes that were sent. The result goes in
+ * the story's backup record (verifiedAt, mismatches, treeHash) and the tree
+ * hash onto the folder as a tag; a story whose files differ is sent again
+ * next time.
  */
 
 import {
@@ -55,7 +62,10 @@ import {
   isFileLive,
   uploadFile,
   renameFile,
+  setAppProperties,
+  trashFile,
 } from "./driveClient";
+import { sha256Hex, treeHash } from "./hashing";
 
 export const DRIVE_SETTING = "drive";
 export const FOLDER_NAME = "trashpicskidgold";
@@ -65,6 +75,7 @@ const KIND = "storymakerKind";
 const STORY_ID = "storymakerStoryId";
 const INSTALL_ID = "storymakerInstallId";
 const IMAGE_ID = "storymakerImageId";
+const TREE_HASH = "storymakerTreeHash";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 /** What is remembered about Drive between sessions, in the settings store. */
@@ -103,14 +114,19 @@ function imageFileName(rec) {
 }
 
 /**
- * Which stories need to go up: those never backed up, and those saved
- * since their last upload. Pure, and on this machine's clock only.
+ * Which stories need to go up: those never backed up, those saved since
+ * their last upload, and those whose last check found a file on Drive that
+ * differs from the one here. Pure, and on this machine's clock only.
  */
 export function planBackup(stories, records) {
   const byId = new Map(records.map((r) => [r.storyId, r]));
   return stories.filter((s) => {
     const rec = byId.get(s.id);
-    return !rec || (s.updatedAt ?? 0) > (rec.syncedAt ?? 0);
+    return (
+      !rec ||
+      (s.updatedAt ?? 0) > (rec.syncedAt ?? 0) ||
+      (rec.mismatches?.length ?? 0) > 0
+    );
   });
 }
 
@@ -181,10 +197,149 @@ async function readStoryFolder(folderId) {
   return {
     imagesFolderId: imagesFolder?.id ?? null,
     historyFolderId: sub("history")?.id ?? null,
-    storyFileId: children.find((f) => f.appProperties[KIND] === "story")?.id ?? null,
-    indexFileId: children.find((f) => f.appProperties[KIND] === "index")?.id ?? null,
+    storyFile: children.find((f) => f.appProperties[KIND] === "story") ?? null,
+    indexFile: children.find((f) => f.appProperties[KIND] === "index") ?? null,
     images,
   };
+}
+
+/**
+ * What the story's folder on Drive ought to contain, from what is here:
+ * the images.json index, the story.json head, and the SHA-256 of each file
+ * the backup is answerable for (the two JSON files and every picture the
+ * story refers to; history/ is append-only and not checked). Each picture
+ * keeps the name Drive already has for it, so a folder with every picture
+ * in place hashes the same whether it is about to be uploaded or merely
+ * looked at.
+ *
+ *   { index, text, pictures: [{ id, rec, fileName, hash, bytes, mime }],
+ *     expected: Map("story.json" | "images.json" | "images/<name>" → hash) }
+ */
+async function localTree(story, folder) {
+  const pictures = [];
+  const index = [];
+  for (const id of collectImageIds(story)) {
+    const rec = await getImage(id);
+    if (!rec?.data) continue;
+    const { bytes, mime } = dataUrlToBytes(rec.data);
+    const fileName = folder.images.get(id)?.name ?? imageFileName(rec);
+    pictures.push({ id, rec, fileName, bytes, mime, hash: await sha256Hex(bytes) });
+    index.push({
+      id,
+      storyId: story.id,
+      caption: rec.caption ?? "",
+      characterReferenceId: rec.characterReferenceId ?? null,
+      file: `images/${fileName}`,
+    });
+  }
+  const text = {
+    formatVersion: BUNDLE_FORMAT_VERSION,
+    id: story.id,
+    title: story.title,
+    jsonblob: story.jsonblob,
+  };
+  const expected = new Map();
+  for (const p of pictures) expected.set(`images/${p.fileName}`, p.hash);
+  expected.set("images.json", await sha256Hex(jsonBlob(index)));
+  expected.set("story.json", await sha256Hex(jsonBlob(text)));
+  return { index, text, pictures, expected };
+}
+
+/**
+ * Drive's checksums for the files `expected` names, from a listing of the
+ * story folder. A file Drive has not finished hashing comes back as
+ * `pending`; a file that is not there at all counts as different.
+ */
+function checksumsOnDrive(folder, expected) {
+  const got = new Map();
+  const pending = [];
+  const byName = new Map();
+  for (const [id, f] of folder.images) byName.set(`images/${f.name}`, { id, f });
+  for (const path of expected.keys()) {
+    let f = null;
+    if (path === "story.json") f = folder.storyFile;
+    else if (path === "images.json") f = folder.indexFile;
+    else f = byName.get(path)?.f ?? null;
+    if (!f) got.set(path, null);
+    else if (!f.sha256Checksum) pending.push(path);
+    else got.set(path, f.sha256Checksum);
+  }
+  return { got, pending };
+}
+
+const CHECKSUM_RETRY_MS = 1500;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Compare what is here with what Drive says it holds, by hash only.
+ * Lists the folder; when Drive has not yet hashed something just uploaded,
+ * waits a moment and lists once more. Returns
+ *   { mismatches: [path…], verifiedAt: ms | null, treeHash }
+ * verifiedAt is null when any checksum was still missing: not wrong, just
+ * not yet known, and never shown as red.
+ */
+async function compareWithDrive(folderId, expected) {
+  let folder = await readStoryFolder(folderId);
+  let { got, pending } = checksumsOnDrive(folder, expected);
+  if (pending.length) {
+    await sleep(CHECKSUM_RETRY_MS);
+    folder = await readStoryFolder(folderId);
+    ({ got, pending } = checksumsOnDrive(folder, expected));
+  }
+  const mismatches = [];
+  for (const [path, hash] of expected) {
+    if (pending.includes(path)) continue;
+    if (got.get(path) !== hash) mismatches.push(path);
+  }
+  mismatches.sort();
+  return {
+    mismatches,
+    verifiedAt: pending.length ? null : Date.now(),
+    treeHash: await treeHash(expected),
+  };
+}
+
+/**
+ * Check every backed-up story against Drive, by hash only, and bring its
+ * record up to date. A story edited since its last upload is not compared
+ * (its bytes here are newer than the ones on Drive, by design) and is
+ * counted as waiting. Returns
+ *   { verified, waiting, unverified, differing: [title…], failures: [msg…] }
+ */
+export async function verifyAll({ onProgress } = {}) {
+  const out = { verified: 0, waiting: 0, unverified: 0, differing: [], failures: [] };
+  const records = await listBackupRecords();
+  let done = 0;
+  for (const record of records) {
+    const story = await getStory(record.storyId);
+    if (!story) {
+      done++;
+      continue;
+    }
+    onProgress?.({ done, total: records.length, title: story.title });
+    if ((story.updatedAt ?? 0) > (record.syncedAt ?? 0)) {
+      out.waiting++;
+      done++;
+      continue;
+    }
+    try {
+      const folder = await readStoryFolder(record.folderId);
+      const { expected } = await localTree(story, folder);
+      const result = await compareWithDrive(record.folderId, expected);
+      await putBackupRecord({ ...record, ...result });
+      if (result.treeHash !== record.treeHash && !result.mismatches.length) {
+        await setAppProperties(record.folderId, { [TREE_HASH]: result.treeHash });
+      }
+      if (result.mismatches.length) out.differing.push(story.title || "Untitled");
+      else if (result.verifiedAt) out.verified++;
+      else out.unverified++;
+    } catch (e) {
+      out.failures.push(`${story.title || "Untitled"}: ${e.message}`);
+      if (e.code === "signin" || e.code === "popup") throw e;
+    }
+    done++;
+  }
+  return out;
 }
 
 /**
@@ -253,45 +408,32 @@ async function uploadStory(storyId, { rootId, installId, record }) {
   const historyFolderId =
     folder.historyFolderId ?? (await createFolder("history", { parentId: folderId }));
 
-  // Pictures: only the ones Drive does not have yet.
-  const index = [];
-  for (const id of collectImageIds(story)) {
-    const rec = await getImage(id);
-    if (!rec?.data) continue;
-    let fileName = folder.images.get(id)?.name;
-    if (!fileName) {
-      fileName = imageFileName(rec);
-      const { bytes, mime } = dataUrlToBytes(rec.data);
-      await uploadFile({
-        folderId: imagesFolderId,
-        name: fileName,
-        appProperties: { [KIND]: "image", [IMAGE_ID]: id, [STORY_ID]: story.id },
-        blob: new Blob([bytes], { type: mime }),
-      });
-    }
-    index.push({
-      id,
-      storyId: story.id,
-      caption: rec.caption ?? "",
-      characterReferenceId: rec.characterReferenceId ?? null,
-      file: `images/${fileName}`,
+  const local = await localTree(story, folder);
+
+  // Pictures: the ones Drive does not have yet, and the ones it has wrong.
+  // A picture never changes once it has an id, so a different checksum
+  // means the file on Drive is not the one sent (replaced by hand, or a
+  // bad upload): it goes to the trash and a fresh copy goes up under the
+  // same name. A checksum Drive has not computed yet is left alone.
+  for (const p of local.pictures) {
+    const have = folder.images.get(p.id);
+    if (have && (!have.sha256Checksum || have.sha256Checksum === p.hash)) continue;
+    if (have) await trashFile(have.id);
+    await uploadFile({
+      folderId: imagesFolderId,
+      name: p.fileName,
+      appProperties: { [KIND]: "image", [IMAGE_ID]: p.id, [STORY_ID]: story.id },
+      blob: new Blob([p.bytes], { type: p.mime }),
     });
   }
 
   const indexFile = await uploadFile({
-    fileId: folder.indexFileId,
+    fileId: folder.indexFile?.id,
     folderId,
     name: "images.json",
     appProperties: { [KIND]: "index", [STORY_ID]: story.id },
-    blob: jsonBlob(index),
+    blob: jsonBlob(local.index),
   });
-
-  const text = {
-    formatVersion: BUNDLE_FORMAT_VERSION,
-    id: story.id,
-    title: story.title,
-    jsonblob: story.jsonblob,
-  };
 
   // A dated copy of the words, never overwritten. The text of a story is
   // small (pictures are by id), so keeping every version costs nothing,
@@ -300,18 +442,24 @@ async function uploadStory(storyId, { rootId, installId, record }) {
     folderId: historyFolderId,
     name: `${historyStamp(story.updatedAt)}.json`,
     appProperties: { [KIND]: "history", [STORY_ID]: story.id },
-    blob: jsonBlob({ ...text, savedAt: story.updatedAt ?? null }),
+    blob: jsonBlob({ ...local.text, savedAt: story.updatedAt ?? null }),
   });
 
   // story.json, the head, goes last: a folder with a story.json in it is
   // a complete bundle, so nothing may be missing by the time it lands.
   const storyFile = await uploadFile({
-    fileId: folder.storyFileId,
+    fileId: folder.storyFile?.id,
     folderId,
     name: "story.json",
     appProperties: { [KIND]: "story", [STORY_ID]: story.id },
-    blob: jsonBlob(text),
+    blob: jsonBlob(local.text),
   });
+
+  // Then look at what landed. A difference is not a failure of the upload
+  // (it went up; the record says what is wrong) but it keeps the story in
+  // the plan, so the next backup sends the differing files again.
+  const check = await compareWithDrive(folderId, local.expected);
+  await setAppProperties(folderId, { [TREE_HASH]: check.treeHash });
 
   await putBackupRecord({
     storyId: story.id,
@@ -322,5 +470,8 @@ async function uploadStory(storyId, { rootId, installId, record }) {
     fileId: storyFile.id,
     indexFileId: indexFile.id,
     syncedAt: story.updatedAt ?? 0,
+    treeHash: check.treeHash,
+    verifiedAt: check.verifiedAt,
+    mismatches: check.mismatches,
   });
 }

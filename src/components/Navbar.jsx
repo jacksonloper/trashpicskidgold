@@ -1,3 +1,5 @@
+import { backupState, BACKUP_GLYPH } from "../driveBackup/backupState";
+
 export default function Navbar({
   ref,
   stories,
@@ -13,6 +15,7 @@ export default function Navbar({
   trashCount,
   onOpenSettings,
   driveStatus,
+  driveRecords,
 }) {
   const handleImportChange = (e) => {
     const files = Array.from(e.target.files ?? []);
@@ -38,8 +41,13 @@ export default function Navbar({
               No stories yet
             </option>
           )}
+          {/* With the backup on, each title gets a glyph: ✅ on Drive and
+              checked, ⏳ waiting to go up, ❌ a file on Drive differs. */}
           {stories.map((s) => (
             <option key={s.id} value={s.id}>
+              {driveRecords
+                ? `${BACKUP_GLYPH[backupState(s, driveRecords[s.id])]} `
+                : ""}
               {s.title || "Untitled"}
             </option>
           ))}
