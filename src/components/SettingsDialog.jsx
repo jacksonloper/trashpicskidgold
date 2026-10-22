@@ -1,15 +1,22 @@
 import { useEffect, useRef } from "react";
 import { WAITING_GAMES } from "../settingsStore";
+import DriveBackupSettings from "./DriveBackupSettings";
 
 /**
- * The grown-up's settings. For now that is one choice: which game the waiting
- * letter plays while a picture is being made.
+ * The grown-up's settings: which game the waiting letter plays while a
+ * picture is being made, and whether the stories are backed up to Google Drive.
  *
  * Escape or a click outside closes it. A change takes effect as soon as it is
  * clicked — there is nothing to save, and nothing here can lose work. Free
  * play starts the chosen game on the spot, for trying it out at length.
  */
-export default function SettingsDialog({ settings, onChange, onPlay, onClose }) {
+export default function SettingsDialog({
+  settings,
+  onChange,
+  onPlay,
+  onClose,
+  drive,
+}) {
   const closeRef = useRef(null);
 
   useEffect(() => {
@@ -55,6 +62,8 @@ export default function SettingsDialog({ settings, onChange, onPlay, onClose }) 
           Free play starts the chosen game right now, with nothing being made.{" "}
           <kbd>Esc</kbd> or its ✕ ends it.
         </p>
+
+        {drive && <DriveBackupSettings drive={drive} />}
 
         <div className="plan-modal-buttons">
           <button type="button" className="btn-primary" onClick={onPlay}>

@@ -6,6 +6,7 @@
  *   stories   – { id, title, jsonblob }
  *   images    – { id, storyId, caption, data, characterReferenceId }
  *   trash     – pictures removed from a story, kept until the user empties it
+ *   backup    – per-story bookkeeping for the Google Drive backup (driveBackup/)
  *
  * Pictures cost an API call and minutes of a child's attention, so nothing
  * ever deletes one outright: every path that takes a picture out of a story
@@ -14,7 +15,7 @@
  */
 
 const DB_NAME = "storymaker";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise = null;
 
@@ -38,6 +39,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains("trash")) {
         db.createObjectStore("trash", { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains("backup")) {
+        db.createObjectStore("backup", { keyPath: "storyId" });
       }
     };
 
@@ -121,7 +125,16 @@ async function count(storeName) {
   });
 }
 
-/* ---- settings (API key) ---- */
+/* ---- settings (API key, Drive) ---- */
+
+export async function getSetting(key) {
+  const rec = await get("settings", key);
+  return rec?.value ?? null;
+}
+
+export async function putSetting(key, value) {
+  await put("settings", { key, value });
+}
 
 export async function getApiKey() {
   const rec = await get("settings", "apiKey");
@@ -245,8 +258,24 @@ export async function getStory(id) {
   return get("stories", id);
 }
 
+/**
+ * Every story carries `updatedAt`, stamped on each save. The Drive backup
+ * compares it with the stamp of the last upload to tell "edited since" from
+ * "untouched" without diffing the whole record. Both stamps come from this
+ * machine's clock, and a save never moves the stamp backwards, so a clock
+ * put right can never make an edit look old.
+ */
+function stamped(story) {
+  return { ...story, updatedAt: Math.max(Date.now(), (story.updatedAt ?? 0) + 1) };
+}
+
 export async function saveStory(story) {
-  await put("stories", story);
+  await put("stories", stamped(story));
+}
+
+/** Every story record in full, for the backup. */
+export async function listStoriesFull() {
+  return getAll("stories");
 }
 
 /**
@@ -308,7 +337,7 @@ export async function saveStoryWithImages(story, images) {
     const tx = db.transaction(["images", "stories"], "readwrite");
     const imgStore = tx.objectStore("images");
     for (const img of images ?? []) imgStore.put(img);
-    tx.objectStore("stories").put(story);
+    tx.objectStore("stories").put(stamped(story));
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -356,6 +385,18 @@ export async function getStoryImages(storyId) {
     const tx = db.transaction("images", "readonly");
     const idx = tx.objectStore("images").index("storyId");
     const req = idx.getAll(storyId);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** Just the ids of a story's pictures, without reading megabytes of them. */
+export async function getStoryImageIds(storyId) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("images", "readonly");
+    const idx = tx.objectStore("images").index("storyId");
+    const req = idx.getAllKeys(storyId);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
@@ -498,6 +539,37 @@ export async function emptyTrash() {
       store.clear();
     };
     tx.oncomplete = () => resolve(removed);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* ---- Google Drive backup bookkeeping ---- */
+
+/**
+ * One record per story that has been backed up:
+ *   { storyId, folderId, folderName, imagesFolderId, historyFolderId,
+ *     fileId, indexFileId, syncedAt }
+ *
+ * `syncedAt` is the story's own `updatedAt` as of its last upload; a story
+ * whose `updatedAt` has moved past it goes up again. The ids say where on
+ * Drive the story's folder and files are, so an upload can patch them in
+ * place rather than make a second folder.
+ */
+export async function listBackupRecords() {
+  return getAll("backup");
+}
+
+export async function putBackupRecord(record) {
+  await put("backup", record);
+}
+
+/** Forget everything about Drive: the next backup uploads every story afresh. */
+export async function clearBackupRecords() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("backup", "readwrite");
+    tx.objectStore("backup").clear();
+    tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }

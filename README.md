@@ -15,6 +15,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Stories that stay put** — the app asks the browser to keep its storage *persistent*, so stories and pictures aren't evicted when the disk runs low; only clearing the site's data removes them (Safari may still clear a site that isn't on the Home Screen, so export what matters)
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
+- **Google Drive backup** — optional and write-only: every few minutes whatever changed is written to a *Story Maker* folder in your Drive, laid out so a story's folder zips straight back into Import, with each picture sent once and every version of the words kept
 - **Netlify-ready** — deploys with `netlify.toml` included
 
 ## The waiting letter
@@ -153,7 +154,8 @@ first if you want it in the bundle.
 ## Story bundles
 
 Stories live only in the browser's IndexedDB, so the ZIP that **Export → Download
-ZIP** produces is the only backup there is. **Import** in the navbar reads those
+ZIP** produces is the backup you hold in your hand (the Google Drive backup
+below is the other). **Import** in the navbar reads those
 same ZIPs back — pick several at once to restore a whole shelf of stories.
 
 The layout (`src/storyBundle.js` is the single source of truth for both
@@ -181,6 +183,98 @@ Import rules worth knowing:
 - **Older ZIPs still load.** Bundles exported before Import existed had a bare
   `jsonblob` in `story.json` and no `images.json`; their images are matched back
   by the ordinal prefix in each filename, and the title is read from `story.md`.
+
+## Google Drive backup
+
+Stories live in the browser's IndexedDB, and the ZIP that Export produces was
+the only backup there was. **⚙️ Settings → Connect Google Drive** adds
+another: every few minutes, whatever has changed is written to a *Story
+Maker* folder in the grown-up's Google Drive. Drive is only ever written to.
+Nothing is read back, so no backup can change, overwrite or remove a story
+in the browser, and there is no sync to reason about.
+
+Each story is a folder laid out like an Export ZIP, unpacked:
+
+```
+Story Maker/
+  the-dog/
+    story.json      { formatVersion, id, title, jsonblob }
+    images.json     [ { id, storyId, caption, characterReferenceId, file } ]
+    images/
+      A_dog_1a2b3c4d.png …
+    history/
+      2026-10-22T01-02-03Z.json …
+```
+
+That layout is the point. **To restore a story, download its folder from
+Drive as a ZIP and hand it to Import**: `story.json` and `images.json` are
+what Import reads (`src/storyBundle.js` is still the one definition of the
+format), and `history/` it ignores. Import looks through the single wrapping
+directory Drive puts in a folder download.
+
+The folder differs from a ZIP in two ways, both deliberate:
+
+- **Each picture is sent once.** A picture never changes once it has an id,
+  so the backup uploads only the ones Drive does not already hold. Adding an
+  illustration to a seventy-page story sends one picture and two small JSON
+  files, not the other sixty-nine pictures.
+- **Every version of the words is kept.** Each upload first drops the story's
+  text into `history/` under the time it was saved, and those files are never
+  overwritten. The text is small (pictures are by id), so keeping all of it
+  costs nothing, and a page a child dictated last month can still be read
+  after it was rewritten. `story.json` is always the latest.
+
+Each story carries an `updatedAt` stamp, restamped on every save and never
+moved backwards, and a `backup` store in IndexedDB remembers, per story, the
+stamp as of its last upload and where its folder and files are on Drive. A
+story whose stamp has moved goes up again; `story.json` is written last, so a
+folder that has one is a complete bundle. Deleting a story here leaves its
+folder on Drive alone — that is what a backup is for. Connecting forgets the
+bookkeeping, but every story folder on Drive is tagged with the story's
+permanent id, so a reconnect finds each story's folder again and sends up
+only what it lacks; a different Google account, having none, gets everything.
+Pictures over a few megabytes go up by Drive's resumable protocol. The trash
+is not backed up, and neither is the API key.
+
+Once connected, the open tab backs up every three minutes, whenever it is
+hidden, and on **Back up now**. Nothing in the kid's half of the app changes:
+no dialog, no spinner, just a small ☁️ beside Settings that goes amber when
+Google wants a grown-up to sign in again.
+
+### One tab at a time
+
+Stories are kept in the browser, and two tabs of the app would each hold
+their own copy of the open story, the later autosave winning, and would each
+run their own backups. So the app runs in one tab: the first takes a browser
+lock (`src/useSingleTab.js`, the Web Locks API, mounted from `src/Root.jsx`)
+and keeps it until it closes, and any other tab is shown a notice instead of
+the app, with a **Use this tab instead** button that takes the lock over and
+puts the first tab behind the same notice. The app is never mounted in a tab
+standing aside, so no timer of any kind runs there.
+
+### Setting it up
+
+The app uses the `drive.file` scope: it can only see files it created itself.
+Google classes that as non-sensitive, so there is no verification review, and
+no API key — only an OAuth client id.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) create a
+   project (or pick one) and enable the **Google Drive API**
+   (*APIs & Services → Library*).
+2. *APIs & Services → OAuth consent screen*: external, give it a name and your
+   email. Add the scope `…/auth/drive.file`. Either add yourself (and the
+   other grown-ups) as **test users**, or **Publish** the app — with only
+   non-sensitive scopes, publishing needs no review.
+3. *APIs & Services → Credentials → Create credentials → OAuth client ID*,
+   type **Web application**. Under *Authorised JavaScript origins* add every
+   origin the app is served from, e.g. `http://localhost:5173` and
+   `https://main--trashpicskidgold.netlify.app`. No redirect URIs are needed.
+4. Put the client id in `VITE_GOOGLE_CLIENT_ID`: in `.env.local` for
+   development (see `.env.example`), and on Netlify under *Site configuration
+   → Environment variables*, then redeploy.
+
+Without that variable the Drive section of Settings explains that backup is
+not set up on this build, and everything else works as before.
 
 ## Getting Started
 

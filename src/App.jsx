@@ -17,6 +17,7 @@ import WaitingGame from "./components/WaitingGame";
 import ErrorDetailsModal from "./components/ErrorDetailsModal";
 import SettingsDialog from "./components/SettingsDialog";
 import { loadSettings, saveSettings } from "./settingsStore";
+import useDriveBackup from "./driveBackup/useDriveBackup";
 import {
   buildRefGraphicPrompt,
   planIllustration,
@@ -410,6 +411,12 @@ export default function App() {
       flushSave();
     };
   }, [flushSave]);
+
+  /* ---- Google Drive backup ---- */
+
+  // Write-only: whatever has changed goes up every few minutes. Nothing is
+  // ever read back, so no backup can touch a story in this browser.
+  const drive = useDriveBackup({ flushSave });
 
   /* ---- load active story ---- */
 
@@ -1634,6 +1641,7 @@ export default function App() {
         onOpenTrash={handleOpenTrash}
         trashCount={trashCount}
         onOpenSettings={() => setSettingsOpen(true)}
+        driveStatus={drive.status}
       />
 
       <div className="app">
@@ -1876,6 +1884,7 @@ export default function App() {
           onChange={handleChangeSettings}
           onPlay={handleFreePlay}
           onClose={handleCloseSettings}
+          drive={drive}
         />
       )}
 

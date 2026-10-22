@@ -164,7 +164,18 @@ export async function readStoryBundle(file) {
     throw new Error(`${file.name || "File"} is not a readable ZIP`);
   }
 
-  const storyEntry = zip.file("story.json");
+  // A story folder downloaded from Google Drive arrives as a ZIP with the
+  // same layout, sometimes wrapped in one directory named for the folder.
+  // Look through that wrapper so the Drive copy is something Import reads.
+  let storyEntry = zip.file("story.json");
+  if (!storyEntry) {
+    const wrapped = Object.keys(zip.files).find((p) => /^[^/]+\/story\.json$/.test(p));
+    if (wrapped) {
+      const prefix = wrapped.slice(0, -"story.json".length);
+      zip = zip.folder(prefix);
+      storyEntry = zip.file("story.json");
+    }
+  }
   if (!storyEntry) {
     throw new Error(`${file.name || "Bundle"} has no story.json`);
   }

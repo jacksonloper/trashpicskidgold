@@ -12,6 +12,7 @@ export default function Navbar({
   onOpenTrash,
   trashCount,
   onOpenSettings,
+  driveStatus,
 }) {
   const handleImportChange = (e) => {
     const files = Array.from(e.target.files ?? []);
@@ -99,9 +100,19 @@ export default function Navbar({
           type="button"
           className="btn-small"
           onClick={onOpenSettings}
-          title="Choose which game is played while a picture is being made"
+          title="Choose which game is played while a picture is being made, and whether stories are backed up to Google Drive"
         >
           ⚙️ Settings
+          {/* A small cloud says the stories are being backed up to Drive, and goes
+              amber or red when Google wants something from a grown-up. */}
+          {driveStatus && driveStatus !== "off" && driveStatus !== "unconfigured" && (
+            <span
+              className={`drive-indicator drive-indicator-${driveStatus}`}
+              aria-label={`Google Drive: ${driveStatus}`}
+            >
+              ☁️
+            </span>
+          )}
         </button>
       </div>
     </nav>

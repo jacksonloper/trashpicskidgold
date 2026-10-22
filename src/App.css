@@ -1817,3 +1817,69 @@
   font-size: 0.85rem;
   line-height: 1.35;
 }
+
+/* ---- Google Drive sync ---- */
+
+.settings-note {
+  margin: 0.5rem 0;
+  color: #444;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.settings-note code {
+  font-size: 0.85em;
+}
+
+.settings-drive-buttons {
+  margin-top: 0.5rem;
+}
+
+.drive-status-signin,
+.drive-status-error {
+  color: #b26a00;
+  font-weight: 600;
+}
+
+.drive-status-error {
+  color: #c62828;
+}
+
+.drive-error {
+  color: #c62828;
+  background: #fce4ec;
+  border: 1px solid #ef9a9a;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+/* The cloud beside Settings: calm when all is well, loud when it is not. */
+.drive-indicator {
+  margin-left: 0.35rem;
+  font-size: 0.9em;
+}
+
+.drive-indicator-backing-up {
+  animation: drive-pulse 1.2s ease-in-out infinite;
+}
+
+.drive-indicator-signin,
+.drive-indicator-error {
+  filter: sepia(1) saturate(4) hue-rotate(-20deg);
+}
+
+@keyframes drive-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---- Second tab ---- */
+
+.second-tab-notice p {
+  line-height: 1.5;
+}
