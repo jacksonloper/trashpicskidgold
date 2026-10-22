@@ -136,6 +136,22 @@ export async function putSetting(key, value) {
   await put("settings", { key, value });
 }
 
+/**
+ * A permanent id for this browser, minted the first time it is asked for.
+ *
+ * Story ids are preserved by Import, so the same ZIP restored into two
+ * browsers gives both the same story id. The Drive backup tags each story
+ * folder with this id as well, so those two browsers back up into two
+ * folders rather than taking turns overwriting one.
+ */
+export async function getInstallId() {
+  const have = await getSetting("installId");
+  if (have) return have;
+  const id = crypto.randomUUID();
+  await putSetting("installId", id);
+  return id;
+}
+
 export async function getApiKey() {
   const rec = await get("settings", "apiKey");
   return rec?.value ?? "";

@@ -15,7 +15,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Stories that stay put** — the app asks the browser to keep its storage *persistent*, so stories and pictures aren't evicted when the disk runs low; only clearing the site's data removes them (Safari may still clear a site that isn't on the Home Screen, so export what matters)
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
-- **Google Drive backup** — optional and write-only: every few minutes whatever changed is written to a *Story Maker* folder in your Drive, laid out so a story's folder zips straight back into Import, with each picture sent once and every version of the words kept
+- **Google Drive backup** — optional and write-only: every few minutes whatever changed is written to a *trashpicskidgold* folder in your Drive, laid out so a story's folder zips straight back into Import, with each picture sent once and every version of the words kept
 - **Netlify-ready** — deploys with `netlify.toml` included
 
 ## The waiting letter
@@ -188,15 +188,15 @@ Import rules worth knowing:
 
 Stories live in the browser's IndexedDB, and the ZIP that Export produces was
 the only backup there was. **⚙️ Settings → Connect Google Drive** adds
-another: every few minutes, whatever has changed is written to a *Story
-Maker* folder in the grown-up's Google Drive. Drive is only ever written to.
+another: every few minutes, whatever has changed is written to a
+*trashpicskidgold* folder in the grown-up's Google Drive. Drive is only ever written to.
 Nothing is read back, so no backup can change, overwrite or remove a story
 in the browser, and there is no sync to reason about.
 
 Each story is a folder laid out like an Export ZIP, unpacked:
 
 ```
-Story Maker/
+trashpicskidgold/
   the-dog/
     story.json      { formatVersion, id, title, jsonblob }
     images.json     [ { id, storyId, caption, characterReferenceId, file } ]
@@ -231,8 +231,12 @@ story whose stamp has moved goes up again; `story.json` is written last, so a
 folder that has one is a complete bundle. Deleting a story here leaves its
 folder on Drive alone — that is what a backup is for. Connecting forgets the
 bookkeeping, but every story folder on Drive is tagged with the story's
-permanent id, so a reconnect finds each story's folder again and sends up
-only what it lacks; a different Google account, having none, gets everything.
+permanent id and this browser's, so a reconnect finds each story's folder
+again and sends up only what it lacks; a different Google account, having
+none, gets everything. The browser's id is there because Import preserves
+story ids: the same ZIP restored into two browsers would otherwise back up
+into one folder, each overwriting the other's `story.json`. With it, they get
+`the-lost-star` and `the-lost-star-2`.
 Pictures over a few megabytes go up by Drive's resumable protocol. The trash
 is not backed up, and neither is the API key.
 
