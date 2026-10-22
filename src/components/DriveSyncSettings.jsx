@@ -58,9 +58,11 @@ export default function DriveSyncSettings({ drive }) {
         <>
           <p className="settings-note">
             Keep a copy of every story in a <strong>Story Maker</strong>{" "}
-            folder in your Google Drive, as the same ZIPs Export makes. Stories
-            made on another computer signed in to the same Drive come here too.
-            The app can only see files it made itself.
+            folder in your Google Drive: one folder per story, laid out like
+            an unpacked Export ZIP, each picture sent up once and every version of
+            the words kept. Stories made on
+            another computer signed in to the same Drive come here too. The
+            app can only see files it made itself.
           </p>
           <div className="plan-modal-buttons settings-drive-buttons">
             <button

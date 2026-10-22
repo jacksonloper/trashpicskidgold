@@ -2,8 +2,8 @@
  * The thinnest possible Google Drive client: sign-in through Google Identity
  * Services, and the five REST calls sync needs.
  *
- * Nothing here knows what a story is. It moves named blobs in and out of one
- * folder in the user's Drive and reports what is there.
+ * Nothing here knows what a story is. It makes folders, moves named blobs in
+ * and out of them, and reports what is there.
  *
  * Scope is `drive.file`: the app can see and touch only files it created
  * itself, never the rest of the user's Drive. Google classes that scope as
@@ -211,13 +211,56 @@ async function request(path, { method = "GET", body, headers, raw } = {}) {
 }
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-const FILE_FIELDS = "id,name,modifiedTime,appProperties,trashed";
+const FILE_FIELDS = "id,name,mimeType,parents,modifiedTime,appProperties";
 
 function q(parts) {
   return encodeURIComponent(parts.join(" and "));
 }
 
-/** Find the app's folder by id, or by name, or create it. Returns its id. */
+function esc(v) {
+  return String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+function toFile(f) {
+  return {
+    id: f.id,
+    name: f.name,
+    mimeType: f.mimeType,
+    parents: f.parents ?? [],
+    modifiedTime: Date.parse(f.modifiedTime),
+    appProperties: f.appProperties ?? {},
+  };
+}
+
+async function listQuery(parts) {
+  const out = [];
+  let pageToken = "";
+  do {
+    const page = await request(
+      `${API}/files?q=${q(parts)}` +
+        `&fields=nextPageToken,files(${FILE_FIELDS})&pageSize=1000` +
+        (pageToken ? `&pageToken=${pageToken}` : "")
+    );
+    for (const f of page.files ?? []) out.push(toFile(f));
+    pageToken = page.nextPageToken ?? "";
+  } while (pageToken);
+  return out;
+}
+
+/** Create a folder. Returns its id. */
+export async function createFolder(name, { parentId, appProperties } = {}) {
+  const body = { name, mimeType: FOLDER_MIME };
+  if (parentId) body.parents = [parentId];
+  if (appProperties) body.appProperties = appProperties;
+  const created = await request(`${API}/files?fields=id`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return created.id;
+}
+
+/** Find the app's top folder by id, or by name, or create it. Returns its id. */
 export async function ensureFolder(name, knownId) {
   if (knownId) {
     try {
@@ -227,47 +270,35 @@ export async function ensureFolder(name, knownId) {
       if (e.code !== "notfound") throw e;
     }
   }
-  const found = await request(
-    `${API}/files?q=${q([
-      `mimeType='${FOLDER_MIME}'`,
-      `name='${name.replace(/'/g, "\\'")}'`,
-      "trashed=false",
-      "'root' in parents",
-    ])}&fields=files(id)&pageSize=1`
-  );
-  if (found.files?.length) return found.files[0].id;
-  const created = await request(`${API}/files?fields=id`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, mimeType: FOLDER_MIME }),
-  });
-  return created.id;
+  const found = await listQuery([
+    `mimeType='${FOLDER_MIME}'`,
+    `name='${esc(name)}'`,
+    "trashed=false",
+    "'root' in parents",
+  ]);
+  if (found.length) return found[0].id;
+  return createFolder(name);
 }
 
 /**
- * Every live file in the folder, across however many pages Drive splits the
- * listing into. Each is { id, name, modifiedTime (ms), appProperties }.
+ * Every live file directly inside a folder, across however many pages
+ * Drive splits the listing into.
+ * Each is { id, name, mimeType, parents, modifiedTime (ms), appProperties }.
  */
 export async function listFiles(folderId) {
-  const out = [];
-  let pageToken = "";
-  do {
-    const page = await request(
-      `${API}/files?q=${q([`'${folderId}' in parents`, "trashed=false"])}` +
-        `&fields=nextPageToken,files(${FILE_FIELDS})&pageSize=1000` +
-        (pageToken ? `&pageToken=${pageToken}` : "")
-    );
-    for (const f of page.files ?? []) {
-      out.push({
-        id: f.id,
-        name: f.name,
-        modifiedTime: Date.parse(f.modifiedTime),
-        appProperties: f.appProperties ?? {},
-      });
-    }
-    pageToken = page.nextPageToken ?? "";
-  } while (pageToken);
-  return out;
+  return listQuery([`'${folderId}' in parents`, "trashed=false"]);
+}
+
+/**
+ * Every live file the app has tagged with a given property value, wherever
+ * it sits. One paged request however many stories there are, which is what
+ * makes the three-minute check cheap.
+ */
+export async function listTagged(key, value) {
+  return listQuery([
+    `appProperties has { key='${esc(key)}' and value='${esc(value)}' }`,
+    "trashed=false",
+  ]);
 }
 
 /** Is this file still live? false when trashed, or gone altogether. */
@@ -277,17 +308,18 @@ export async function isFileLive(fileId) {
     return !f.trashed;
   } catch (e) {
     if (e.code === "notfound") return false;
-    throw e;
+    throw e; // anything else is "don't know", never "gone"
   }
 }
 
 /**
  * Create or overwrite a file. Multipart upload: metadata and bytes in one
- * round trip, which is plenty for a ZIP of a few megabytes.
+ * round trip, which is plenty for a picture of a few megabytes.
  * Returns { id, modifiedTime (ms) }.
  */
 export async function uploadFile({ fileId, folderId, name, appProperties, blob }) {
-  const metadata = { name, appProperties };
+  const metadata = { name };
+  if (appProperties) metadata.appProperties = appProperties;
   if (!fileId) metadata.parents = [folderId];
   const form = new FormData();
   form.append(
@@ -302,6 +334,15 @@ export async function uploadFile({ fileId, folderId, name, appProperties, blob }
   return { id: f.id, modifiedTime: Date.parse(f.modifiedTime) };
 }
 
+/** Change a file's or folder's name. */
+export async function renameFile(fileId, name) {
+  await request(`${API}/files/${fileId}?fields=id`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
 /** The file's bytes, as a Blob. */
 export async function downloadFile(fileId) {
   const res = await request(`${API}/files/${fileId}?alt=media`, { raw: true });
@@ -309,8 +350,9 @@ export async function downloadFile(fileId) {
 }
 
 /**
- * Move a file to Drive's trash. Never a hard delete: a story a grown-up
- * removed here can still be fished back out of Drive for thirty days.
+ * Move a file or folder to Drive's trash — a folder takes its contents
+ * with it. Never a hard delete: a story a grown-up removed here can still
+ * be fished back out of Drive for thirty days.
  */
 export async function trashFile(fileId) {
   try {

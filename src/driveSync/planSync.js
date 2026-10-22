@@ -11,7 +11,8 @@
  * Inputs:
  *   localStories  [{ id, title, updatedAt }]
  *   syncRecords   [{ storyId, fileId, syncedAt, remoteModified, deleted }]
- *   remoteFiles   [{ id, name, modifiedTime, appProperties: { storyId } }]
+ *   remoteFiles   [{ id, name, parents, modifiedTime, appProperties }]
+ *                 — one per story: its story.json on Drive
  *
  * Output: a list of ops, each { op, storyId, fileId?, ... }:
  *   upload         local → Drive (creates the file when fileId is null)
@@ -64,7 +65,7 @@ export function planSync({ localStories, syncRecords, remoteFiles }) {
       } else if (remoteChanged) {
         ops.push({ op: "download", storyId, fileId: file.id, file });
       } else {
-        ops.push({ op: "trashRemote", storyId, fileId: file.id });
+        ops.push({ op: "trashRemote", storyId, fileId: file.id, file });
       }
       continue;
     }

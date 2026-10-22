@@ -14,7 +14,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Failures that explain themselves** — when a picture doesn't arrive, the red banner says what happened in one line and **What happened?** opens the reply behind it: which filter stopped it, what Gemini wrote instead, what to try
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
-- **Google Drive sync** — optional: every story is kept as one of those same ZIPs in a *Story Maker* folder in your Drive, and stories from another computer on the same Drive come here
+- **Google Drive sync** — optional: every story is kept in a *Story Maker* folder in your Drive, laid out like an unpacked Export ZIP with each picture sent up once, and stories from another computer on the same Drive come here
 - **Netlify-ready** — deploys with `netlify.toml` included
 
 ## The waiting letter
@@ -187,9 +187,32 @@ Import rules worth knowing:
 Stories still live in the browser's IndexedDB, but **⚙️ Settings → Connect
 Google Drive** keeps a copy of each one in a *Story Maker* folder in the
 grown-up's Google Drive, and brings back whatever another computer signed in
-to the same Drive has put there. The files are the same ZIPs that Export
-produces, one per story, so a Drive folder full of them is also a backup
-anyone can Import by hand.
+to the same Drive has put there. Each story is a folder laid out exactly like
+an Export ZIP, unpacked:
+
+```
+Story Maker/
+  my-story/
+    story.json      { formatVersion, id, title, jsonblob }
+    images.json     [ { id, storyId, caption, characterReferenceId, file } ]
+    images/
+      the_dog_1a2b3c4d.png …
+    history/
+      2026-10-22T01-02-03Z.json …
+```
+
+A picture never changes once it has an id, so each one goes up once and is
+never sent again: adding an illustration to a seventy-page story uploads one
+picture and two small JSON files, not the other sixty-nine pictures.
+
+`story.json` is the head, and the only thing sync reads back. Every upload
+first drops the same text into `history/` under the time it was saved, and
+those are never overwritten: the words of a story are small, so every version
+there has ever been is kept, and a page a child dictated last month can still
+be read even after it was rewritten. The folder, downloaded from Drive as a
+ZIP, is something Import reads (it takes `story.json` and `images/`, and
+ignores `history/`), so the Drive copy is also a backup anyone can restore by
+hand.
 
 Once connected, the open tab syncs every three minutes, whenever it comes back
 into view, and on **Sync now**. Nothing in the kid's half of the app changes:
@@ -210,8 +233,11 @@ has no idea what Drive is):
 | edited | trashed or gone | sent up again as a new file |
 
 Each story carries an `updatedAt` stamp, and a `sync` store in IndexedDB
-remembers, per story, the stamp and the Drive file's modified time as of the
-last successful sync. A side has "moved" when its stamp is newer than that.
+remembers, per story, the stamp and its `story.json`'s modified time on Drive
+as of the last successful sync (plus which folder and files are its). One
+request lists every `story.json` the app has made, however many stories there
+are, so the three-minute check is cheap; `story.json` is written last in an
+upload, so nothing in a finished folder is newer than the stamp. A side has "moved" when its stamp is newer than that.
 A story being typed in at the moment a download would land is skipped until
 the next sync, so a keystroke is never written over. Before a story is removed
 here because Drive no longer lists it, the file is asked for by id — a listing
