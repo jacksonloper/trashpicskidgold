@@ -281,14 +281,17 @@ export async function ensureFolder(name, knownId) {
 }
 
 /**
- * The app's folders carrying a given tag, wherever they sit. How a story's
- * folder is found again when the bookkeeping has been forgotten: every
- * story has a permanent unique id, and its folder is tagged with it.
+ * The app's folders carrying every one of the given tags, wherever they
+ * sit. How a story's folder is found again when the bookkeeping has been
+ * forgotten: every story has a permanent unique id, every browser has one
+ * too, and a story folder is tagged with both.
  */
-export async function findFoldersByTag(key, value) {
+export async function findFoldersByTags(tags) {
   return listQuery([
     `mimeType='${FOLDER_MIME}'`,
-    `appProperties has { key='${esc(key)}' and value='${esc(value)}' }`,
+    ...Object.entries(tags).map(
+      ([k, v]) => `appProperties has { key='${esc(k)}' and value='${esc(v)}' }`
+    ),
     "trashed=false",
   ]);
 }

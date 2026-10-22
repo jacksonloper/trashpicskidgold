@@ -27,6 +27,14 @@ export default function AgeGate({ onAccept }) {
           third-party rights. Use of this site and any output is at your own
           risk.
         </p>
+        <p className="age-gate-warning" role="alert">
+          <strong>Your stories live only in this browser.</strong> We do not
+          want to hold your child&rsquo;s content on a server, so stories are
+          kept in the browser&rsquo;s own storage, which the browser may
+          delete at any time &mdash; Safari does so after a week of not
+          visiting. Download a story after writing it, or back up to Google
+          Drive in Settings.
+        </p>
         <label className="age-gate-check">
           <input
             type="checkbox"

@@ -488,6 +488,17 @@
   line-height: 1.5;
 }
 
+.age-gate-warning {
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #ef9a9a;
+  border-radius: 8px;
+  background: #fce4ec;
+  color: #c62828;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .age-gate-check {
   display: flex;
   align-items: center;

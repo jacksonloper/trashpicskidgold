@@ -7,7 +7,7 @@
  * On Drive a story is a folder, laid out like the ZIP that Export produces,
  * unpacked:
  *
- *   Story Maker/
+ *   trashpicskidgold/
  *     <title>/
  *       story.json      { formatVersion, id, title, jsonblob }   ← the head
  *       images.json     [ { id, storyId, caption, characterReferenceId, file } ]
@@ -31,6 +31,7 @@
 import {
   getSetting,
   putSetting,
+  getInstallId,
   getStory,
   getImage,
   listStoriesFull,
@@ -49,7 +50,7 @@ import {
 import {
   createFolder,
   ensureFolder,
-  findFoldersByTag,
+  findFoldersByTags,
   listFiles,
   isFileLive,
   uploadFile,
@@ -57,11 +58,12 @@ import {
 } from "./driveClient";
 
 export const DRIVE_SETTING = "drive";
-export const FOLDER_NAME = "Story Maker";
+export const FOLDER_NAME = "trashpicskidgold";
 
 /** appProperties tags, so files can be told apart by what they are. */
 const KIND = "storymakerKind";
 const STORY_ID = "storymakerStoryId";
+const INSTALL_ID = "storymakerInstallId";
 const IMAGE_ID = "storymakerImageId";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
@@ -119,6 +121,7 @@ export async function runBackup({ onProgress } = {}) {
   const summary = { uploaded: 0, skipped: 0, failures: [] };
 
   const config = await loadDriveConfig();
+  const installId = await getInstallId();
   const rootId = await ensureFolder(FOLDER_NAME, config.folderId);
   if (config.folderId && config.folderId !== rootId) {
     // The folder we knew is gone (trashed, or a different account): the
@@ -140,7 +143,11 @@ export async function runBackup({ onProgress } = {}) {
   for (const listed of todo) {
     onProgress?.({ done, total: todo.length, title: listed.title });
     try {
-      await uploadStory(listed.id, { rootId, record: recordById.get(listed.id) });
+      await uploadStory(listed.id, {
+        rootId,
+        installId,
+        record: recordById.get(listed.id),
+      });
       summary.uploaded++;
     } catch (e) {
       summary.failures.push(`${listed.title || "Untitled"}: ${e.message}`);
@@ -180,7 +187,25 @@ async function readStoryFolder(folderId) {
   };
 }
 
-async function uploadStory(storyId, { rootId, record }) {
+/**
+ * A folder name nobody else in the parent is using: the same story restored
+ * into two browsers gets "the-lost-star" and "the-lost-star-2", so a parent
+ * looking in Drive sees two folders rather than one with a mystery inside.
+ */
+async function freeFolderName(rootId, wanted) {
+  const taken = new Set(
+    (await listFiles(rootId))
+      .filter((f) => f.mimeType === FOLDER_MIME)
+      .map((f) => f.name)
+  );
+  if (!taken.has(wanted)) return wanted;
+  for (let n = 2; ; n++) {
+    const candidate = `${wanted}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
+async function uploadStory(storyId, { rootId, installId, record }) {
   // Read fresh: the listing may be minutes old by the time this story's
   // turn comes, and the record's stamp must match what actually went up.
   const story = await getStory(storyId);
@@ -188,26 +213,38 @@ async function uploadStory(storyId, { rootId, record }) {
   const name = folderNameFor(story);
 
   // The folder, made once. A record that names a folder Drive no longer
-  // has (trashed by hand) is ignored. With no record — a reconnect, a new
-  // browser — the folder is found again by the story's id, which every
-  // story folder carries as a tag, so a story never gets a second folder.
+  // has (trashed by hand) is ignored. With no record — a reconnect — the
+  // folder is found again by its tags: this story's id and this browser's,
+  // which every story folder carries, so a story never gets a second
+  // folder from the same browser, and never shares one with another.
   let folderId = record?.folderId ?? null;
   if (folderId && !(await isFileLive(folderId))) folderId = null;
   let folderName = record?.folderName ?? null;
   if (!folderId) {
-    const found = await findFoldersByTag(STORY_ID, story.id);
+    const found = await findFoldersByTags({
+      [STORY_ID]: story.id,
+      [INSTALL_ID]: installId,
+    });
     if (found.length) {
       folderId = found[0].id;
       folderName = found[0].name;
     }
   }
   if (!folderId) {
-    folderId = await createFolder(name, {
+    folderName = await freeFolderName(rootId, name);
+    folderId = await createFolder(folderName, {
       parentId: rootId,
-      appProperties: { [KIND]: "storyFolder", [STORY_ID]: story.id },
+      appProperties: {
+        [KIND]: "storyFolder",
+        [STORY_ID]: story.id,
+        [INSTALL_ID]: installId,
+      },
     });
-  } else if (folderName && folderName !== name) {
-    await renameFile(folderId, name);
+  } else if (folderName && folderName !== name && !folderName.startsWith(`${name}-`)) {
+    // The title changed: the folder follows it, unless its name is only a
+    // numbered variant of the same title.
+    folderName = await freeFolderName(rootId, name);
+    await renameFile(folderId, folderName);
   }
 
   const folder = await readStoryFolder(folderId);
@@ -279,7 +316,7 @@ async function uploadStory(storyId, { rootId, record }) {
   await putBackupRecord({
     storyId: story.id,
     folderId,
-    folderName: name,
+    folderName,
     imagesFolderId,
     historyFolderId,
     fileId: storyFile.id,

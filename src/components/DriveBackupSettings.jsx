@@ -51,7 +51,7 @@ export default function DriveBackupSettings({ drive }) {
       {!enabled ? (
         <>
           <p className="settings-note">
-            Keep a copy of every story in a <strong>Story Maker</strong>{" "}
+            Keep a copy of every story in a <strong>trashpicskidgold</strong>{" "}
             folder in your Google Drive: one folder per story, laid out like
             an unpacked Export ZIP, each picture sent up once and every
             version of the words kept. Drive is only ever written to — nothing
