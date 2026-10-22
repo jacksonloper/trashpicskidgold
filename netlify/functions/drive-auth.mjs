@@ -40,8 +40,12 @@ export default async function handler(req, context) {
   const action =
     context.params?.action ?? new URL(req.url).pathname.split("/").filter(Boolean).pop();
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
+  // Only this site's own pages may talk to this. A cross-site page that
+  // could post a code here would bind its own Google account to this
+  // browser's cookie, and the kid's stories would back up into its Drive.
+  if (!sameOrigin(req)) return json({ error: "cross-site request" }, 403);
 
-  const env = readEnv(context);
+  const env = readEnv();
   if (!env.ok) return json({ error: env.error }, 500);
 
   try {
@@ -60,7 +64,20 @@ export default async function handler(req, context) {
   }
 }
 
-function readEnv(context) {
+function sameOrigin(req) {
+  const site = req.headers.get("sec-fetch-site");
+  if (site) return site === "same-origin";
+  // Older browsers send no Sec-Fetch-Site; fall back to Origin vs Host.
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).host === new URL(req.url).host;
+  } catch {
+    return false;
+  }
+}
+
+function readEnv() {
   const e = (globalThis.Netlify?.env?.toObject?.() ?? process.env) || {};
   const clientId = e.VITE_GOOGLE_CLIENT_ID;
   const clientSecret = e.GOOGLE_CLIENT_SECRET;
@@ -72,7 +89,6 @@ function readEnv(context) {
         "drive-auth is not set up: VITE_GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and DRIVE_COOKIE_SECRET must all be set.",
     };
   }
-  void context;
   return { ok: true, clientId, clientSecret, cookieSecret };
 }
 
@@ -97,11 +113,14 @@ async function exchange(req, env) {
   if (t.refresh_token) {
     headers["Set-Cookie"] = setCookie(seal(t.refresh_token, env.cookieSecret));
   } else if (!readCookie(req)) {
-    // Google only hands a refresh token over on the first consent. With
-    // no cookie from an earlier one either, the sign-in would last an hour
-    // and then need the popup again: say so, rather than pretend.
+    // Google only hands a refresh token over on the first consent, and
+    // with no cookie from an earlier one (cleared site data, an expired
+    // grant) this sign-in would last an hour and then need the popup
+    // again. Revoking the access token revokes the whole grant, so the
+    // next popup shows the consent screen and comes back with one.
+    await revoke(t.access_token);
     return json(
-      { error: "Google gave no refresh token. Disconnect, then connect again." },
+      { error: "Google gave no refresh token this time. Please connect once more." },
       409
     );
   }
@@ -126,24 +145,31 @@ async function refresh(req, env) {
     // worthless now; the browser will ask for a click.
     return json({ error: t.error }, 401, { "Set-Cookie": clearCookie() });
   }
-  return json(tokenBody(t));
+  // Now and then Google rotates the refresh token: keep the new one.
+  const headers = t.refresh_token
+    ? { "Set-Cookie": setCookie(seal(t.refresh_token, env.cookieSecret)) }
+    : {};
+  return json(tokenBody(t), 200, headers);
 }
 
 async function signout(req, env) {
   const sealed = readCookie(req);
   const refreshToken = sealed ? open(sealed, env.cookieSecret) : null;
-  if (refreshToken) {
-    // Best effort: a revoke that fails still leaves the cookie gone.
-    await fetch(REVOKE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ token: refreshToken }),
-    }).catch(() => {});
-  }
+  // Best effort: a revoke that fails still leaves the cookie gone.
+  if (refreshToken) await revoke(refreshToken);
   return json({}, 200, { "Set-Cookie": clearCookie() });
 }
 
 /* ---- Google ---- */
+
+/** Tell Google the token (and the grant behind it) is finished with. */
+async function revoke(token) {
+  await fetch(REVOKE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ token }),
+  }).catch(() => {});
+}
 
 async function googleToken(params) {
   let res;

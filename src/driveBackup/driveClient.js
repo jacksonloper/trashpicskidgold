@@ -199,6 +199,14 @@ async function authPost(action, body) {
       code: "network",
     });
   }
+  // A site built for the function but served without it answers every
+  // path with the app's own HTML, status 200: say that, not "failed".
+  if (!(res.headers.get("content-type") ?? "").includes("application/json")) {
+    throw new DriveError(
+      "The sign-in service is not deployed on this site (VITE_DRIVE_SERVER_AUTH is set, but the Netlify function is not there).",
+      { status: res.status, code: "config" }
+    );
+  }
   const data = await res.json().catch(() => ({}));
   return { status: res.status, data };
 }
