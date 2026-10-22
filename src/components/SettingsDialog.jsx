@@ -16,6 +16,7 @@ export default function SettingsDialog({
   onPlay,
   onClose,
   drive,
+  stories,
 }) {
   const closeRef = useRef(null);
 
@@ -63,7 +64,7 @@ export default function SettingsDialog({
           <kbd>Esc</kbd> or its ✕ ends it.
         </p>
 
-        {drive && <DriveBackupSettings drive={drive} />}
+        {drive && <DriveBackupSettings drive={drive} stories={stories} />}
 
         <div className="plan-modal-buttons">
           <button type="button" className="btn-primary" onClick={onPlay}>

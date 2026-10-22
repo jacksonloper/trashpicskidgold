@@ -236,7 +236,7 @@ export default function App() {
   /* ---- top-level state ---- */
   const [apiKey, setApiKey] = useState("");
   const [apiKeySaved, setApiKeySaved] = useState(false);
-  const [storyList, setStoryList] = useState([]); // [{id, title}]
+  const [storyList, setStoryList] = useState([]); // [{id, title, updatedAt?}]
   const [activeStoryId, setActiveStoryId] = useState(null);
   const [activeSectionId, setActiveSectionId] = useState(null); // section on screen
   const [story, setStory] = useState(null); // full story record or null
@@ -320,9 +320,13 @@ export default function App() {
     if (!s) return;
     dirtyStoryRef.current = null;
     try {
-      await saveStory(s);
+      const saved = await saveStory(s);
+      // The list carries the save stamp too, so the backup glyph beside the
+      // title can turn to "waiting" the moment a story is edited.
       setStoryList((prev) =>
-        prev.map((x) => (x.id === s.id ? { ...x, title: s.title } : x))
+        prev.map((x) =>
+          x.id === s.id ? { ...x, title: s.title, updatedAt: saved.updatedAt } : x
+        )
       );
     } catch (err) {
       console.error("auto-save failed", err);
@@ -572,8 +576,11 @@ export default function App() {
     await flushSave();
     const id = newStoryId();
     const blank = createBlankStory(id);
-    await saveStory(blank);
-    setStoryList((prev) => [...prev, { id, title: blank.title }]);
+    const saved = await saveStory(blank);
+    setStoryList((prev) => [
+      ...prev,
+      { id, title: blank.title, updatedAt: saved.updatedAt },
+    ]);
     setActiveStoryId(id);
   }, [flushSave]);
 
@@ -630,7 +637,10 @@ export default function App() {
     setError(null);
     try {
       const { storyId, story: newStory } = await loadExampleStory();
-      setStoryList((prev) => [...prev, { id: storyId, title: newStory.title }]);
+      setStoryList((prev) => [
+        ...prev,
+        { id: storyId, title: newStory.title, updatedAt: newStory.updatedAt },
+      ]);
       setActiveStoryId(storyId);
     } catch (err) {
       setError(asSnack(err, "Failed to load example story: "));
@@ -664,9 +674,13 @@ export default function App() {
           try {
             const bundle = await readStoryBundle(file);
             const prepared = prepareForImport(bundle, existingIds);
-            await saveStoryWithImages(prepared.story, prepared.images);
+            const saved = await saveStoryWithImages(prepared.story, prepared.images);
             existingIds.push(prepared.story.id);
-            added.push({ id: prepared.story.id, title: prepared.story.title });
+            added.push({
+              id: prepared.story.id,
+              title: prepared.story.title,
+              updatedAt: saved.updatedAt,
+            });
             if (prepared.remapped) copies++;
             droppedImages += prepared.droppedImageRefs;
           } catch (err) {
@@ -1642,6 +1656,7 @@ export default function App() {
         trashCount={trashCount}
         onOpenSettings={() => setSettingsOpen(true)}
         driveStatus={drive.status}
+        driveRecords={drive.enabled ? drive.recordsByStoryId : null}
       />
 
       <div className="app">
@@ -1885,6 +1900,7 @@ export default function App() {
           onPlay={handleFreePlay}
           onClose={handleCloseSettings}
           drive={drive}
+          stories={storyList}
         />
       )}
 

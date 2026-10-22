@@ -334,7 +334,12 @@ async function request(path, { method = "GET", body, headers, raw } = {}) {
 }
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-const FILE_FIELDS = "id,name,mimeType,parents,modifiedTime,appProperties";
+// sha256Checksum is Drive's own hash of a binary file's content: how the
+// backup checks what landed without reading anything back. Folders and
+// Docs-type files have none; and for a moment after an upload it may not
+// be there yet.
+const FILE_FIELDS =
+  "id,name,mimeType,parents,modifiedTime,appProperties,sha256Checksum";
 
 function q(parts) {
   return encodeURIComponent(parts.join(" and "));
@@ -352,6 +357,7 @@ function toFile(f) {
     parents: f.parents ?? [],
     modifiedTime: Date.parse(f.modifiedTime),
     appProperties: f.appProperties ?? {},
+    sha256Checksum: f.sha256Checksum ? f.sha256Checksum.toLowerCase() : null,
   };
 }
 
@@ -422,7 +428,8 @@ export async function findFoldersByTags(tags) {
 /**
  * Every live file directly inside a folder, across however many pages
  * Drive splits the listing into.
- * Each is { id, name, mimeType, parents, modifiedTime (ms), appProperties }.
+ * Each is { id, name, mimeType, parents, modifiedTime (ms), appProperties,
+ * sha256Checksum (lower-case hex, or null when Drive has none yet) }.
  */
 export async function listFiles(folderId) {
   return listQuery([`'${folderId}' in parents`, "trashed=false"]);
@@ -517,3 +524,21 @@ export async function renameFile(fileId, name) {
   });
 }
 
+
+/** Set (merge) appProperties on a file or folder. Keys set to null are removed. */
+export async function setAppProperties(fileId, appProperties) {
+  await request(`${API}/files/${fileId}?fields=id`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ appProperties }),
+  });
+}
+
+/** Move a file to the trash. The bytes stay recoverable; nothing is deleted. */
+export async function trashFile(fileId) {
+  await request(`${API}/files/${fileId}?fields=id`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trashed: true }),
+  });
+}
