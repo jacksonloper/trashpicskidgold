@@ -13,6 +13,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Something to do while it draws** — a letter appears in the middle of the window for as long as the wait lasts; type it and it poofs, and another takes its place
 - **Failures that explain themselves** — when a picture doesn't arrive, the red banner says what happened in one line and **What happened?** opens the reply behind it: which filter stopped it, what Gemini wrote instead, what to try
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
+- **Stories that stay put** — the app asks the browser to keep its storage *persistent*, so stories and pictures aren't evicted when the disk runs low; only clearing the site's data removes them (Safari may still clear a site that isn't on the Home Screen, so export what matters)
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
 - **Netlify-ready** — deploys with `netlify.toml` included
 
