@@ -1,30 +1,38 @@
 import { wipeDatabase } from "./db";
-import { signOut } from "./driveBackup/driveClient";
+import { clearStoredToken, signOut } from "./driveBackup/driveClient";
+import { clearSettings } from "./settingsStore";
+import { clearAgreement } from "./ageGateStore";
 
 /**
  * Leave nothing of the family's behind on this computer.
  *
  * In order: let go of the Google sign-in (revoked at Google, cookie
- * cleared), empty the database, drop every localStorage and sessionStorage
- * key the app owns, then reload so no story is left in memory either. Each
- * step is best effort: a sign-out that fails must not stop the wipe.
+ * cleared) — but not for long: a parent on library wifi that has just
+ * dropped must still get the wipe, so the sign-out is given a few seconds
+ * and then left behind (the connections page in the Google account can
+ * finish the job). Then empty the database, which also shuts the door on
+ * any save still scheduled; forget each store's own key; sweep whatever
+ * else carries the app's prefix; and reload, so no story is left in memory.
  *
- * The one thing deliberately left is nothing: the age-gate agreement goes
- * too, so the next person sees the entrance page.
+ * The age-gate agreement goes too, so the next person sees the entrance.
  */
 export const FORGET_PHRASE = "forget everything on this computer";
 
+const SIGN_OUT_PATIENCE_MS = 5000;
+
 export async function forgetThisComputer() {
-  try {
-    await signOut();
-  } catch {
-    /* the cookie may already be gone; carry on */
-  }
+  await Promise.race([
+    signOut().catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, SIGN_OUT_PATIENCE_MS)),
+  ]);
+  clearStoredToken();
   try {
     await wipeDatabase();
   } catch (e) {
     console.error("wipe failed", e);
   }
+  clearSettings();
+  clearAgreement();
   for (const store of [localStorage, sessionStorage]) {
     try {
       const ours = [];

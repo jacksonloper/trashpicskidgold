@@ -67,7 +67,7 @@ export default function SettingsDialog({
 
         {drive && <DriveBackupSettings drive={drive} stories={stories} />}
 
-        <ForgetComputer />
+        <ForgetComputer driveConfigured={!!drive?.configured} />
 
         <div className="plan-modal-buttons">
           <button type="button" className="btn-primary" onClick={onPlay}>

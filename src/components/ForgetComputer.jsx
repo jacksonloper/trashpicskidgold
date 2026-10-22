@@ -14,7 +14,7 @@ const GOOGLE_CONNECTIONS = "https://myaccount.google.com/connections";
  * whole sentence typed out, so that no child, and no hurried grown-up,
  * ever reaches it by accident.
  */
-export default function ForgetComputer() {
+export default function ForgetComputer({ driveConfigured }) {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -26,19 +26,23 @@ export default function ForgetComputer() {
   return (
     <fieldset className="settings-group">
       <legend className="plan-label">Leaving this computer</legend>
+      {driveConfigured && (
+        <p className="settings-note">
+          Signed in on a computer you have left? Remove the app from your{" "}
+          <a href={GOOGLE_CONNECTIONS} target="_blank" rel="noopener noreferrer">
+            Google account
+          </a>{" "}
+          and every computer is signed out of the backup at once. The stories
+          already on that computer stay there until someone clears them.
+        </p>
+      )}
       <p className="settings-note">
-        Signed in on a computer you have left? Remove the app from your{" "}
-        <a href={GOOGLE_CONNECTIONS} target="_blank" rel="noopener noreferrer">
-          Google account
-        </a>{" "}
-        and every computer is signed out of the backup at once. The stories
-        already on that computer stay there until someone clears them.
-      </p>
-      <p className="settings-note">
-        Still at the computer? <strong>Forget everything</strong> removes every
-        story and picture here, the trash, the API key, the settings and the
-        Google sign-in, as if the app had never been opened. Copies in Google
-        Drive are not touched.
+        {driveConfigured ? "Still at the computer? " : "Leaving this computer? "}
+        <strong>Forget everything</strong> removes every story and picture
+        here, the trash, the API key and the settings
+        {driveConfigured ? " and the Google sign-in" : ""}, as if the app had
+        never been opened.
+        {driveConfigured ? " Copies in Google Drive are not touched." : ""}
       </p>
       <div className="plan-modal-buttons settings-drive-buttons">
         <button

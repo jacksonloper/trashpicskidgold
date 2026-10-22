@@ -105,6 +105,11 @@ function validToken() {
   return null;
 }
 
+/** Drop the access token held in this tab, without telling Google. */
+export function clearStoredToken() {
+  storeToken(null);
+}
+
 /** True when a usable token is in hand, without asking Google anything. */
 export function hasToken() {
   return !!validToken();
