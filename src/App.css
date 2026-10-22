@@ -1877,3 +1877,9 @@
     opacity: 0.35;
   }
 }
+
+/* ---- Second tab ---- */
+
+.second-tab-notice p {
+  line-height: 1.5;
+}

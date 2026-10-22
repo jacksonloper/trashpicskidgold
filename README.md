@@ -246,6 +246,17 @@ been trashed, the sync records are wiped and every local story goes up fresh.
 
 The trash is not synced, and neither is the API key.
 
+### One tab at a time
+
+Stories are kept in the browser, and two tabs of the app would each hold
+their own copy of the open story, the later autosave winning, and would each
+run their own sync. So the app runs in one tab: the first takes a browser
+lock (`src/useSingleTab.js`, the Web Locks API, mounted from `src/Root.jsx`) and keeps it until it closes,
+and any other tab is shown a notice instead of the app, with a **Use this tab
+instead** button that takes the lock over and puts the first tab behind the
+same notice. The app is never mounted in a tab standing aside, so no timer
+of any kind runs there.
+
 ### Setting it up
 
 The app uses the `drive.file` scope: it can only see files it created itself.
