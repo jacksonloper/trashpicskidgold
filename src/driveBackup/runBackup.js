@@ -49,6 +49,7 @@ import {
 import {
   createFolder,
   ensureFolder,
+  findFoldersByTag,
   listFiles,
   isFileLive,
   uploadFile,
@@ -187,15 +188,25 @@ async function uploadStory(storyId, { rootId, record }) {
   const name = folderNameFor(story);
 
   // The folder, made once. A record that names a folder Drive no longer
-  // has (trashed by hand) falls through to a fresh one.
+  // has (trashed by hand) is ignored. With no record — a reconnect, a new
+  // browser — the folder is found again by the story's id, which every
+  // story folder carries as a tag, so a story never gets a second folder.
   let folderId = record?.folderId ?? null;
   if (folderId && !(await isFileLive(folderId))) folderId = null;
+  let folderName = record?.folderName ?? null;
+  if (!folderId) {
+    const found = await findFoldersByTag(STORY_ID, story.id);
+    if (found.length) {
+      folderId = found[0].id;
+      folderName = found[0].name;
+    }
+  }
   if (!folderId) {
     folderId = await createFolder(name, {
       parentId: rootId,
       appProperties: { [KIND]: "storyFolder", [STORY_ID]: story.id },
     });
-  } else if (record?.folderName && record.folderName !== name) {
+  } else if (folderName && folderName !== name) {
     await renameFile(folderId, name);
   }
 

@@ -228,9 +228,12 @@ moved backwards, and a `backup` store in IndexedDB remembers, per story, the
 stamp as of its last upload and where its folder and files are on Drive. A
 story whose stamp has moved goes up again; `story.json` is written last, so a
 folder that has one is a complete bundle. Deleting a story here leaves its
-folder on Drive alone — that is what a backup is for. Connecting a different
-Google account forgets the bookkeeping and sends every story up afresh. The
-trash is not backed up, and neither is the API key.
+folder on Drive alone — that is what a backup is for. Connecting forgets the
+bookkeeping, but every story folder on Drive is tagged with the story's
+permanent id, so a reconnect finds each story's folder again and sends up
+only what it lacks; a different Google account, having none, gets everything.
+Pictures over a few megabytes go up by Drive's resumable protocol. The trash
+is not backed up, and neither is the API key.
 
 Once connected, the open tab backs up every three minutes, whenever it is
 hidden, and on **Back up now**. Nothing in the kid's half of the app changes:

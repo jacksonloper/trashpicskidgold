@@ -107,7 +107,7 @@ export async function getAccessToken({ interactive = false } = {}) {
   if (have) return have;
   if (!CLIENT_ID) {
     throw new DriveError(
-      "Google Drive sync is not set up: VITE_GOOGLE_CLIENT_ID is missing.",
+      "Google Drive backup is not set up: VITE_GOOGLE_CLIENT_ID is missing.",
       { code: "config" }
     );
   }
@@ -281,6 +281,19 @@ export async function ensureFolder(name, knownId) {
 }
 
 /**
+ * The app's folders carrying a given tag, wherever they sit. How a story's
+ * folder is found again when the bookkeeping has been forgotten: every
+ * story has a permanent unique id, and its folder is tagged with it.
+ */
+export async function findFoldersByTag(key, value) {
+  return listQuery([
+    `mimeType='${FOLDER_MIME}'`,
+    `appProperties has { key='${esc(key)}' and value='${esc(value)}' }`,
+    "trashed=false",
+  ]);
+}
+
+/**
  * Every live file directly inside a folder, across however many pages
  * Drive splits the listing into.
  * Each is { id, name, mimeType, parents, modifiedTime (ms), appProperties }.
@@ -300,25 +313,72 @@ export async function isFileLive(fileId) {
   }
 }
 
+/** Drive takes at most 5 MB in one multipart request; above that, resumable. */
+const MULTIPART_LIMIT = 4 * 1024 * 1024;
+
 /**
- * Create or overwrite a file. Multipart upload: metadata and bytes in one
- * round trip, which is plenty for a picture of a few megabytes.
- * Returns { id, modifiedTime (ms) }.
+ * Create or overwrite a file. Returns { id, modifiedTime (ms) }.
+ *
+ * Small files go as one multipart request: metadata and bytes together.
+ * A big picture — a camera photo put on a page by hand, a large model
+ * output — goes by the resumable protocol instead: one request to open
+ * the session with the metadata, one to put the bytes.
  */
 export async function uploadFile({ fileId, folderId, name, appProperties, blob }) {
   const metadata = { name };
   if (appProperties) metadata.appProperties = appProperties;
   if (!fileId) metadata.parents = [folderId];
-  const form = new FormData();
-  form.append(
-    "metadata",
-    new Blob([JSON.stringify(metadata)], { type: "application/json" })
-  );
-  form.append("file", blob);
-  const url = fileId
-    ? `${UPLOAD_API}/files/${fileId}?uploadType=multipart&fields=id,modifiedTime`
-    : `${UPLOAD_API}/files?uploadType=multipart&fields=id,modifiedTime`;
-  const f = await request(url, { method: fileId ? "PATCH" : "POST", body: form });
+  const method = fileId ? "PATCH" : "POST";
+  const base = fileId ? `${UPLOAD_API}/files/${fileId}` : `${UPLOAD_API}/files`;
+
+  if (blob.size <= MULTIPART_LIMIT) {
+    const form = new FormData();
+    form.append(
+      "metadata",
+      new Blob([JSON.stringify(metadata)], { type: "application/json" })
+    );
+    form.append("file", blob);
+    const f = await request(`${base}?uploadType=multipart&fields=id,modifiedTime`, {
+      method,
+      body: form,
+    });
+    return { id: f.id, modifiedTime: Date.parse(f.modifiedTime) };
+  }
+
+  const opened = await request(`${base}?uploadType=resumable&fields=id,modifiedTime`, {
+    method,
+    headers: {
+      "Content-Type": "application/json; charset=UTF-8",
+      "X-Upload-Content-Type": blob.type || "application/octet-stream",
+      "X-Upload-Content-Length": String(blob.size),
+    },
+    body: JSON.stringify(metadata),
+    raw: true,
+  });
+  const session = opened.headers.get("Location");
+  if (!session) {
+    throw new DriveError("Google Drive did not open an upload session.", {
+      code: "api",
+    });
+  }
+  // The session URL carries its own authorisation; the bytes go in one PUT.
+  let res;
+  try {
+    res = await fetch(session, {
+      method: "PUT",
+      headers: { "Content-Type": blob.type || "application/octet-stream" },
+      body: blob,
+    });
+  } catch {
+    throw new DriveError("Could not reach Google Drive.", { code: "network" });
+  }
+  if (!res.ok) {
+    throw new DriveError(`Google Drive said ${res.status} to the upload.`, {
+      status: res.status,
+      code: "api",
+    });
+  }
+  const f = await res.json();
   return { id: f.id, modifiedTime: Date.parse(f.modifiedTime) };
 }
 

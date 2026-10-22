@@ -46,6 +46,14 @@ export default function useDriveBackup({ flushSave }) {
   const backUpNow = useCallback(
     async ({ interactive = false } = {}) => {
       if (!CLIENT_ID || busyRef.current) return;
+      // Google hands out a token only through a popup, and a browser lets
+      // a popup open only on a click. A timer with no token in hand would
+      // only get itself blocked, and blocked again three minutes later; so
+      // it just turns the cloud amber and waits for the click.
+      if (!interactive && !hasToken()) {
+        setStatus("signin");
+        return;
+      }
       busyRef.current = true;
       setStatus("backing-up");
       setError(null);
