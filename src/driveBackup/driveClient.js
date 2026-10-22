@@ -9,10 +9,17 @@
  * itself, never the rest of the user's Drive. Google classes that scope as
  * non-sensitive, so the OAuth client needs no verification review.
  *
- * Tokens come from the GIS "token model": an access token good for about an
- * hour, handed over through a popup. There is no refresh token in a browser
- * app, so when one lapses the next sync asks for another — silently where
- * Google allows it, otherwise through a button a grown-up presses.
+ * Tokens come one of two ways:
+ *
+ * - On a build with VITE_DRIVE_SERVER_AUTH=1, through the Netlify function
+ *   in netlify/functions/drive-auth.mjs. Google's popup hands the browser a
+ *   one-time code, the function trades it (with the client secret, which a
+ *   browser never may hold) for a refresh token it keeps in an encrypted
+ *   HttpOnly cookie, and from then on it mints an hour-long access token
+ *   whenever asked, with no popup and no click, for months.
+ * - Otherwise, the GIS "token model": an hour-long access token straight
+ *   from the popup. There is no refresh token in a browser alone, so when
+ *   one lapses the next backup needs a click.
  */
 
 const GIS_SRC = "https://accounts.google.com/gsi/client";
@@ -23,6 +30,15 @@ const TOKEN_KEY = "storymaker_drive_token";
 
 /** The OAuth client id, baked in at build time. Empty means "not set up". */
 export const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
+
+/** Whether the Netlify function is there to keep the sign-in alive. */
+export const SERVER_AUTH = import.meta.env.VITE_DRIVE_SERVER_AUTH === "1";
+const AUTH_API = "/api/drive-auth";
+
+/** True when a lapsed token can be renewed with no click: the timer may run. */
+export function canRenewQuietly() {
+  return SERVER_AUTH;
+}
 
 export class DriveError extends Error {
   constructor(message, { status, code } = {}) {
@@ -95,10 +111,11 @@ export function hasToken() {
 }
 
 /**
- * Get an access token, asking Google for a fresh one when needed.
+ * Get an access token, asking for a fresh one when needed.
  *
  * `interactive: true` is for a click: it may show the consent screen.
- * `interactive: false` is for a timer: Google is asked quietly, and a popup
+ * `interactive: false` is for a timer: with the server there, the cookie
+ * renews the token quietly; without it, Google is asked quietly, and a popup
  * the browser blocks surfaces as a DriveError with code "popup" so the UI can
  * offer a button instead.
  */
@@ -111,8 +128,20 @@ export async function getAccessToken({ interactive = false } = {}) {
       { code: "config" }
     );
   }
-  await loadGis();
 
+  if (SERVER_AUTH) {
+    const renewed = await serverRefresh();
+    if (renewed) return renewed;
+    if (!interactive) {
+      throw new DriveError("Google needs a sign-in to carry on backing up.", {
+        code: "signin",
+      });
+    }
+    const code = await requestCode();
+    return serverExchange(code);
+  }
+
+  await loadGis();
   return new Promise((resolve, reject) => {
     if (!tokenClient) {
       tokenClient = window.google.accounts.oauth2.initTokenClient({
@@ -154,10 +183,104 @@ export async function getAccessToken({ interactive = false } = {}) {
   });
 }
 
+/* ---- the server-kept sign-in ---- */
+
+async function authPost(action, body) {
+  let res;
+  try {
+    res = await fetch(`${AUTH_API}/${action}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+  } catch {
+    throw new DriveError("Could not reach the sign-in service.", {
+      code: "network",
+    });
+  }
+  // A site built for the function but served without it answers every
+  // path with the app's own HTML, status 200: say that, not "failed".
+  if (!(res.headers.get("content-type") ?? "").includes("application/json")) {
+    throw new DriveError(
+      "The sign-in service is not deployed on this site (VITE_DRIVE_SERVER_AUTH is set, but the Netlify function is not there).",
+      { status: res.status, code: "config" }
+    );
+  }
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, data };
+}
+
+/** A fresh token from the cookie, or null when there is no sign-in to renew. */
+async function serverRefresh() {
+  const { status, data } = await authPost("refresh");
+  if (status === 401) return null;
+  if (status !== 200 || !data.accessToken) {
+    throw new DriveError(data.error || "The sign-in service failed.", {
+      status,
+      code: "api",
+    });
+  }
+  storeToken({ accessToken: data.accessToken, expiresAt: data.expiresAt });
+  return data.accessToken;
+}
+
+/** The one-time code from Google's popup, for the server to trade in. */
+async function requestCode() {
+  await loadGis();
+  return new Promise((resolve, reject) => {
+    const client = window.google.accounts.oauth2.initCodeClient({
+      client_id: CLIENT_ID,
+      scope: SCOPE,
+      ux_mode: "popup",
+      callback: (resp) => {
+        if (resp.error || !resp.code) {
+          reject(
+            new DriveError(resp.error_description || resp.error || "Google sign-in failed.", {
+              code: "signin",
+            })
+          );
+          return;
+        }
+        resolve(resp.code);
+      },
+      error_callback: (err) => {
+        const blocked =
+          err?.type === "popup_failed_to_open" || err?.type === "popup_closed";
+        reject(
+          new DriveError(
+            blocked
+              ? "Google needs a sign-in to carry on backing up."
+              : err?.message || "Google sign-in failed.",
+            { code: blocked ? "popup" : "signin" }
+          )
+        );
+      },
+    });
+    client.requestCode();
+  });
+}
+
+async function serverExchange(code) {
+  const { status, data } = await authPost("exchange", { code });
+  if (status !== 200 || !data.accessToken) {
+    throw new DriveError(data.error || "The sign-in service failed.", {
+      status,
+      code: status === 409 || status === 401 ? "signin" : "api",
+    });
+  }
+  storeToken({ accessToken: data.accessToken, expiresAt: data.expiresAt });
+  return data.accessToken;
+}
+
 /** Drop the token and tell Google to revoke it. Best effort. */
 export async function signOut() {
   const t = validToken();
   storeToken(null);
+  if (SERVER_AUTH) {
+    await authPost("signout").catch(() => {});
+    return;
+  }
   if (t && window.google?.accounts?.oauth2) {
     await new Promise((resolve) =>
       window.google.accounts.oauth2.revoke(t, () => resolve())

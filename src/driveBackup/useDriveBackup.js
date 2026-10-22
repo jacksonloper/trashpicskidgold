@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CLIENT_ID, getAccessToken, hasToken, signOut } from "./driveClient";
+import {
+  CLIENT_ID,
+  canRenewQuietly,
+  getAccessToken,
+  hasToken,
+  signOut,
+} from "./driveClient";
 import { loadDriveConfig, saveDriveConfig, runBackup } from "./runBackup";
 import { clearBackupRecords } from "../db";
 
@@ -34,7 +40,9 @@ export default function useDriveBackup({ flushSave }) {
     loadDriveConfig().then((cfg) => {
       if (cancelled) return;
       setConfig(cfg);
-      if (CLIENT_ID && cfg.enabled) setStatus(hasToken() ? "idle" : "signin");
+      if (CLIENT_ID && cfg.enabled) {
+        setStatus(hasToken() || canRenewQuietly() ? "idle" : "signin");
+      }
     });
     return () => {
       cancelled = true;
@@ -46,11 +54,12 @@ export default function useDriveBackup({ flushSave }) {
   const backUpNow = useCallback(
     async ({ interactive = false } = {}) => {
       if (!CLIENT_ID || busyRef.current) return;
-      // Google hands out a token only through a popup, and a browser lets
-      // a popup open only on a click. A timer with no token in hand would
-      // only get itself blocked, and blocked again three minutes later; so
-      // it just turns the cloud amber and waits for the click.
-      if (!interactive && !hasToken()) {
+      // Without the server, Google hands out a token only through a popup,
+      // and a browser lets a popup open only on a click. A timer with no
+      // token in hand would only get itself blocked, and blocked again
+      // three minutes later; so it just turns the cloud amber and waits for
+      // the click. With the server, the cookie renews it quietly.
+      if (!interactive && !hasToken() && !canRenewQuietly()) {
         setStatus("signin");
         return;
       }

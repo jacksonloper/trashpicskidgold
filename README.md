@@ -280,6 +280,41 @@ no API key — only an OAuth client id.
 Without that variable the Drive section of Settings explains that backup is
 not set up on this build, and everything else works as before.
 
+### Staying signed in for longer than an hour
+
+On its own, a browser can only get hour-long tokens from Google, and only
+through a popup a person clicked for. So without more, the cloud goes amber
+an hour into a long session and a grown-up presses **Sign in and back up**
+once; nothing is lost in between, the next backup catches up.
+
+To make that go away, the site can keep the sign-in alive itself. The
+Netlify function in `netlify/functions/drive-auth.mjs` holds the OAuth
+client secret, which a browser never may. Google's popup hands the browser a
+one-time code; the function trades it for a refresh token, keeps that in an
+encrypted, HttpOnly cookie on this site (the browser's JavaScript never sees
+it), and from then on mints a fresh access token whenever the app asks: no
+popup, no click, for months. No story, picture or word passes through the
+function, only Google's tokens.
+
+To turn it on, set three more variables on Netlify and redeploy:
+
+| Variable | What |
+| --- | --- |
+| `VITE_DRIVE_SERVER_AUTH` | `1` — tells the build to use the function |
+| `GOOGLE_CLIENT_SECRET` | the client secret from the same OAuth client (never `VITE_`) |
+| `DRIVE_COOKIE_SECRET` | any long random string, e.g. `openssl rand -base64 48` |
+
+Nothing changes in Cloud Console: the code arrives through the popup, not a
+redirect, so no redirect URI is needed. One thing does matter there: an OAuth
+consent screen still **in testing** expires its refresh tokens after seven
+days, so **publish** it (with only the `drive.file` scope, that needs no
+review). Locally, `netlify dev` serves the function alongside Vite; plain
+`npm run dev` has no function, so leave `VITE_DRIVE_SERVER_AUTH` unset there
+and the hourly popup model is used instead.
+
+**Disconnect** in Settings asks the function to revoke the refresh token and
+clear the cookie, so the sign-in is gone from Google's side too.
+
 ## Getting Started
 
 ```bash
