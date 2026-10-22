@@ -97,13 +97,24 @@ async function get(storeName, key) {
   });
 }
 
+/**
+ * A write resolves only when its transaction has committed, not when the
+ * request has merely succeeded: a transaction can still abort after that
+ * (storage full, the database closing), and a caller told "saved" at the
+ * request stage would never hear about it.
+ */
 async function put(storeName, record) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const req = tx.objectStore(storeName).put(record);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    let result;
+    req.onsuccess = () => {
+      result = req.result;
+    };
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error ?? req.error);
+    tx.onabort = () => reject(tx.error ?? req.error ?? new Error("aborted"));
   });
 }
 
@@ -121,9 +132,10 @@ async function del(storeName, key) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
-    const req = tx.objectStore(storeName).delete(key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    tx.objectStore(storeName).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error("aborted"));
   });
 }
 

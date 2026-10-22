@@ -224,6 +224,9 @@ function confirmProps(pending) {
  * @param {Error|string} e – what went wrong
  * @param {string} [prefix] – said before it, e.g. "Could not open the trash: "
  */
+/** How long to wait before trying a refused save again. */
+const SAVE_RETRY_MS = 5000;
+
 function asSnack(e, prefix = "") {
   if (typeof e === "string") return { message: prefix + e, details: null };
   return {
@@ -276,6 +279,9 @@ export default function App() {
   const [trashPickSectionId, setTrashPickSectionId] = useState(null); // picker
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
   const [revealRequest, setRevealRequest] = useState(null); // { id } to show
+  // A story the browser refused to save: { id, title, message, since }.
+  // Worse than "not backed up", and shown so until a save goes through.
+  const [unsaved, setUnsaved] = useState(null);
 
   const dirtyStoryRef = useRef(null);
   const saveTimerRef = useRef(null);
@@ -328,8 +334,32 @@ export default function App() {
           x.id === s.id ? { ...x, title: s.title, updatedAt: saved.updatedAt } : x
         )
       );
+      // The stamp the browser kept is what the next save builds on, so a
+      // clock put back can never make an edit look older than the last.
+      setStory((prev) =>
+        prev && prev.id === s.id ? { ...prev, updatedAt: saved.updatedAt } : prev
+      );
+      setUnsaved((u) => (u && u.id === s.id ? null : u));
     } catch (err) {
+      // The browser would not take it: storage full, a database that would
+      // not open, a transaction aborted. The words are still on screen and
+      // nowhere else, so this is said loudly and for as long as it lasts,
+      // and the save is tried again — unless a newer version is already
+      // waiting, in which case that one carries these words too.
       console.error("auto-save failed", err);
+      if (!dirtyStoryRef.current) dirtyStoryRef.current = s;
+      setUnsaved((u) => ({
+        id: s.id,
+        title: s.title,
+        message: err?.message || String(err),
+        since: u && u.id === s.id ? u.since : Date.now(),
+      }));
+      if (!saveTimerRef.current) {
+        saveTimerRef.current = setTimeout(() => {
+          saveTimerRef.current = null;
+          flushSave();
+        }, SAVE_RETRY_MS);
+      }
     }
   }, []);
 
@@ -1754,7 +1784,23 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
         driveStatus={drive.status}
         driveRecords={drive.enabled ? drive.recordsByStoryId : null}
+        unsavedStoryId={unsaved?.id ?? null}
       />
+
+      {/* The browser refused to save. No Dismiss: the words on screen are
+          the only copy there is, and that stays true until a save lands,
+          which is when this goes away on its own. */}
+      {unsaved && (
+        <div className="unsaved-banner" role="alert">
+          <strong>Not saved.</strong> This browser would not save
+          &ldquo;{unsaved.title || "Untitled"}&rdquo;
+          {unsaved.message ? ` (${unsaved.message})` : ""}. Your words are
+          on screen only &mdash; do not close this tab. Trying again every
+          few seconds; meanwhile, <strong>Export → Download ZIP</strong>{" "}
+          keeps a copy, and freeing storage (empty the trash, delete an old
+          story) may let the save through.
+        </div>
+      )}
 
       <div className="app">
         {/* The story index: a left-hand sidebar on a wide screen, and the

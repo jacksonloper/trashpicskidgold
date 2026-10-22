@@ -545,6 +545,24 @@
   flex-shrink: 0;
 }
 
+/* The save that the browser refused. Fixed at the top, under the navbar,
+   with no way to close it: it leaves when a save goes through. */
+.unsaved-banner {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  background: #b71c1c;
+  color: #fff;
+  border-bottom: 3px solid #7f0000;
+  padding: 0.75rem 1.25rem;
+  line-height: 1.45;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.unsaved-banner strong {
+  color: #fff;
+}
+
 /* Mirrors the error banner but reads as good news, and sits above it so a
    partly-failed batch can show both at once. */
 .import-banner {

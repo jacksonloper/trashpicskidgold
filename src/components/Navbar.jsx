@@ -16,6 +16,7 @@ export default function Navbar({
   onOpenSettings,
   driveStatus,
   driveRecords,
+  unsavedStoryId,
 }) {
   const handleImportChange = (e) => {
     const files = Array.from(e.target.files ?? []);
@@ -42,12 +43,16 @@ export default function Navbar({
             </option>
           )}
           {/* With the backup on, each title gets a glyph: ✅ on Drive and
-              checked, ⏳ waiting to go up, ❌ a file on Drive differs. */}
+              checked, ⏳ waiting to go up, ❌ a file on Drive differs. A story
+              this browser refused to save gets ❗ whatever Drive says: what
+              Drive holds is not what is on screen. */}
           {stories.map((s) => (
             <option key={s.id} value={s.id}>
-              {driveRecords
-                ? `${BACKUP_GLYPH[backupState(s, driveRecords[s.id])]} `
-                : ""}
+              {s.id === unsavedStoryId
+                ? "❗ "
+                : driveRecords
+                  ? `${BACKUP_GLYPH[backupState(s, driveRecords[s.id])]} `
+                  : ""}
               {s.title || "Untitled"}
             </option>
           ))}
