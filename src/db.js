@@ -604,3 +604,23 @@ export async function clearBackupRecords() {
     tx.onerror = () => reject(tx.error);
   });
 }
+
+/* ---- forgetting this computer ---- */
+
+/**
+ * Empty every store at once: stories, pictures, trash, settings (the API
+ * key among them) and the backup bookkeeping. For a computer the family is
+ * walking away from — a library, a relative's laptop. The copies on Google
+ * Drive are not touched; this is the one thing in the app that destroys
+ * story text, and it is reached only through a typed confirmation.
+ */
+export async function wipeDatabase() {
+  const db = await openDB();
+  const names = Array.from(db.objectStoreNames);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(names, "readwrite");
+    for (const name of names) tx.objectStore(name).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}

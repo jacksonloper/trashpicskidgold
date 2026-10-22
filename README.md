@@ -290,6 +290,23 @@ the app, with a **Use this tab instead** button that takes the lock over and
 puts the first tab behind the same notice. The app is never mounted in a tab
 standing aside, so no timer of any kind runs there.
 
+### Leaving a computer
+
+Two things in **⚙️ Settings → Leaving this computer**, for two moments:
+
+- **Remembered at home.** Removing the app from the
+  [Google account's connections page](https://myaccount.google.com/connections)
+  revokes every sign-in the backup ever made, in every browser at once; the
+  forgotten computer's next backup is refused and its cookie cleared. The
+  stories already in that computer's browser are not touched by this.
+- **Remembered before leaving.** **Forget everything on this computer**
+  destroys every story and picture in the browser, the trash, the API key,
+  the settings and the Google sign-in, then reloads to the entrance page.
+  Copies in Google Drive stay. It is the one thing in the app that destroys
+  story text, so it sits behind a whole sentence typed out —
+  `forget everything on this computer` — the way GitHub guards deleting a
+  repository, so that no child reaches it by accident.
+
 ### Setting it up
 
 The app uses the `drive.file` scope: it can only see files it created itself.
