@@ -353,12 +353,14 @@ export async function deleteStory(id) {
 export async function saveStoryWithImages(story, images) {
   if (!story) return;
   const db = await openDB();
+  const next = stamped(story);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(["images", "stories"], "readwrite");
     const imgStore = tx.objectStore("images");
     for (const img of images ?? []) imgStore.put(img);
-    tx.objectStore("stories").put(stamped(story));
-    tx.oncomplete = () => resolve();
+    tx.objectStore("stories").put(next);
+    // Resolve with the record as stored, `updatedAt` and all, like saveStory.
+    tx.oncomplete = () => resolve(next);
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -568,7 +570,8 @@ export async function emptyTrash() {
 /**
  * One record per story that has been backed up:
  *   { storyId, folderId, folderName, imagesFolderId, historyFolderId,
- *     fileId, indexFileId, syncedAt, treeHash, verifiedAt, mismatches }
+ *     fileId, indexFileId, syncedAt, treeHash, verifiedAt, mismatches,
+ *     mismatchRuns, imageHashes }
  *
  * `syncedAt` is the story's own `updatedAt` as of its last upload; a story
  * whose `updatedAt` has moved past it goes up again. The ids say where on
@@ -578,7 +581,10 @@ export async function emptyTrash() {
  * files on Drive that differ from the ones here (empty when all agree),
  * `verifiedAt` is when they were last all found to agree (null while Drive
  * has not yet hashed something), and `treeHash` is one hash over them all
- * (see driveBackup/hashing.js).
+ * (see driveBackup/hashing.js). `mismatchRuns` counts backups in a row
+ * that met the same mismatches (after three the story is left alone), and
+ * `imageHashes` remembers each picture's hash by id, pictures being
+ * immutable, so a check need not decode them again.
  */
 export async function listBackupRecords() {
   return getAll("backup");

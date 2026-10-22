@@ -637,7 +637,10 @@ export default function App() {
     setError(null);
     try {
       const { storyId, story: newStory } = await loadExampleStory();
-      setStoryList((prev) => [...prev, { id: storyId, title: newStory.title }]);
+      setStoryList((prev) => [
+        ...prev,
+        { id: storyId, title: newStory.title, updatedAt: newStory.updatedAt },
+      ]);
       setActiveStoryId(storyId);
     } catch (err) {
       setError(asSnack(err, "Failed to load example story: "));
@@ -671,9 +674,13 @@ export default function App() {
           try {
             const bundle = await readStoryBundle(file);
             const prepared = prepareForImport(bundle, existingIds);
-            await saveStoryWithImages(prepared.story, prepared.images);
+            const saved = await saveStoryWithImages(prepared.story, prepared.images);
             existingIds.push(prepared.story.id);
-            added.push({ id: prepared.story.id, title: prepared.story.title });
+            added.push({
+              id: prepared.story.id,
+              title: prepared.story.title,
+              updatedAt: saved.updatedAt,
+            });
             if (prepared.remapped) copies++;
             droppedImages += prepared.droppedImageRefs;
           } catch (err) {

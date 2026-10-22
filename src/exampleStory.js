@@ -140,7 +140,7 @@ export async function loadExampleStory() {
       sections: builtSections,
     },
   };
-  await saveStory(story);
+  const saved = await saveStory(story);
 
-  return { storyId, story };
+  return { storyId, story: saved };
 }

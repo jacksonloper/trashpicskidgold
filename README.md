@@ -262,10 +262,17 @@ app waits and lists once more, and if a checksum is still missing the story
 is simply "not yet checked", never wrong.
 
 A difference is not a failed backup: the files went up, but the record says
-one of them is not what it should be, and the next backup sends that story
-again, trashing a picture whose checksum differs and uploading a fresh copy.
+one of them is not what it should be, and the next backup sends only the
+differing files again (a picture whose checksum differs is trashed and a
+fresh copy uploaded; `history/` gets nothing, since the words have not
+changed). After three backups in a row meet the same difference the story
+is left with its ❌ until it is edited or **Verify backups** is clicked.
+A story Drive had not hashed yet when it was looked at is looked at again,
+without uploading, on the next backup. Each picture's hash is remembered in
+the record, so an unchanged picture is not decoded again on every check.
 **Verify backups** in Settings runs the same comparison over every story
-without uploading anything. With the backup on, the story list shows where
+without uploading anything; a story whose folder has been trashed on Drive
+shows ❌ and is made again on the next backup. With the backup on, the story list shows where
 each one stands:
 
 - ✅ sent, and every file's checksum on Drive matches the file here
