@@ -7,6 +7,10 @@
  *   images    – { id, storyId, caption, data, characterReferenceId }
  *   trash     – pictures removed from a story, kept until the user empties it
  *   backup    – per-story bookkeeping for the Google Drive backup (driveBackup/)
+ *   speech    – Gemini's reading of a page, kept so P plays it straight away
+ *
+ * `speech` is a cache and nothing more: it is never exported or backed up,
+ * because any of it can be made again from the words on the page.
  *
  * Pictures cost an API call and minutes of a child's attention, so nothing
  * ever deletes one outright: every path that takes a picture out of a story
@@ -15,7 +19,7 @@
  */
 
 const DB_NAME = "storymaker";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise = null;
 
@@ -54,6 +58,10 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains("backup")) {
         db.createObjectStore("backup", { keyPath: "storyId" });
+      }
+      if (!db.objectStoreNames.contains("speech")) {
+        const speech = db.createObjectStore("speech", { keyPath: "key" });
+        speech.createIndex("usedAt", "usedAt", { unique: false });
       }
     };
 
@@ -629,11 +637,56 @@ export async function clearBackupRecords() {
   });
 }
 
+/* ---- spoken pages ---- */
+
+/** Readings kept at most; the ones least recently played go first. */
+const SPEECH_KEEP = 300;
+
+/**
+ * A page read aloud: { key, pcm, sampleRate, usedAt }, where `key` is a hash
+ * of the words and the voice, and `pcm` is 16-bit mono samples. Null if
+ * there is none yet.
+ */
+export async function getSpeech(key) {
+  return get("speech", key);
+}
+
+/**
+ * Keep a reading, and let go of the oldest ones once there are too many.
+ * A caption that has been rewritten leaves its old reading behind, and a
+ * minute of audio is a few megabytes, so the cache can't simply grow.
+ */
+export async function putSpeech(record) {
+  await put("speech", record);
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("speech", "readwrite");
+    const store = tx.objectStore("speech");
+    const countReq = store.count();
+    countReq.onsuccess = () => {
+      let extra = countReq.result - SPEECH_KEEP;
+      if (extra <= 0) return;
+      // Walk oldest first by the index, so no audio is read just to sort it.
+      const cursorReq = store.index("usedAt").openKeyCursor();
+      cursorReq.onsuccess = () => {
+        const cursor = cursorReq.result;
+        if (!cursor || extra <= 0) return;
+        store.delete(cursor.primaryKey);
+        extra -= 1;
+        cursor.continue();
+      };
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error("aborted"));
+  });
+}
+
 /* ---- forgetting this computer ---- */
 
 /**
  * Empty every store at once: stories, pictures, trash, settings (the API
- * key among them) and the backup bookkeeping. For a computer the family is
+ * key among them), the backup bookkeeping and the spoken pages. For a computer the family is
  * walking away from — a library, a relative's laptop. The copies on Google
  * Drive are not touched; this is the one thing in the app that destroys
  * story text, and it is reached only through a typed confirmation.
