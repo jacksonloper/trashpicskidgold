@@ -5,7 +5,8 @@ import ForgetComputer from "./ForgetComputer";
 
 /**
  * The grown-up's settings: which game the waiting letter plays while a
- * picture is being made, and whether the stories are backed up to Google Drive.
+ * picture is being made, whose voice reads a page aloud, and whether the
+ * stories are backed up to Google Drive.
  *
  * Escape or a click outside closes it. A change takes effect as soon as it is
  * clicked — there is nothing to save, and nothing here can lose work. Free
@@ -64,6 +65,28 @@ export default function SettingsDialog({
           Free play starts the chosen game right now, with nothing being made.{" "}
           <kbd>Esc</kbd> or its ✕ ends it.
         </p>
+
+        <fieldset className="settings-group">
+          <legend className="plan-label">Reading aloud</legend>
+          <label className="settings-option">
+            <input
+              type="checkbox"
+              checked={settings.geminiVoice}
+              onChange={(e) =>
+                onChange({ ...settings, geminiVoice: e.target.checked })
+              }
+            />
+            <span>
+              <strong>Gemini&apos;s voice</strong>
+              <small>
+                <kbd>P</kbd> reads the page in a natural voice from Gemini,
+                using your API key — a few cents a story, each page paid for
+                once. Off, the browser&apos;s own voice reads instead, for
+                free.
+              </small>
+            </span>
+          </label>
+        </fieldset>
 
         {drive && <DriveBackupSettings drive={drive} stories={stories} />}
 

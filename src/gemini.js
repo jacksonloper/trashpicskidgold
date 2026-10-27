@@ -936,3 +936,81 @@ function extractImageFromResponse(data, model) {
   if (!chosen) throw noImageError(data, model);
   return `data:${chosen.mimeType};base64,${chosen.b64}`;
 }
+
+/* ---- reading a page aloud ---- */
+
+/*
+ * Text-to-speech models, newest first. They are previews and get retired
+ * without notice, so a 404 from one moves on to the next rather than
+ * leaving the page silent.
+ */
+const SPEECH_MODELS = ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"];
+
+/** Where in that list to start: past any model this page has seen retired. */
+let speechModelIndex = 0;
+
+/** A warm voice from Gemini's prebuilt set, picked for bedtime stories. */
+export const SPEECH_VOICE = "Sulafat";
+
+/** What the reader is told before the words: how to read them. */
+export const SPEECH_DIRECTION =
+  "Read this aloud warmly, at a natural pace, like a grown-up reading a " +
+  "picture book to a seven-year-old:";
+
+/**
+ * Have Gemini read some words aloud.
+ *
+ * The audio comes back as raw 16-bit little-endian mono PCM, with its
+ * sample rate named in the mime type (24 kHz in practice).
+ *
+ * @param {string} apiKey
+ * @param {string} text – the words to say, already stripped of markdown
+ * @returns {Promise<{ pcm: ArrayBuffer, sampleRate: number }>}
+ */
+export async function generateSpeech(apiKey, text) {
+  const body = {
+    contents: [{ parts: [{ text: `${SPEECH_DIRECTION}\n\n${text}` }] }],
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: {
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: SPEECH_VOICE } },
+      },
+    },
+  };
+
+  for (let i = speechModelIndex; i < SPEECH_MODELS.length; i++) {
+    const model = SPEECH_MODELS[i];
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 404 && i < SPEECH_MODELS.length - 1) {
+      speechModelIndex = i + 1;
+      continue;
+    }
+    if (!res.ok) await throwForStatus(res, model, "read the page aloud");
+
+    const data = await res.json();
+    const part = (data.candidates?.[0]?.content?.parts ?? []).find(
+      (p) => p.inlineData?.data
+    );
+    if (!part) {
+      throw new GeminiError("Gemini sent back no audio.", {
+        title: "No audio came back",
+        what: "Gemini answered, but there was no sound in the answer.",
+        facts: readReply(data, model).facts,
+        saidInstead: null,
+        tryThis: ["Press P again."],
+        raw: rawReply(data),
+      });
+    }
+    const rate = /rate=(\d+)/.exec(part.inlineData.mimeType ?? "");
+    const bytes = Uint8Array.from(atob(part.inlineData.data), (c) =>
+      c.charCodeAt(0)
+    );
+    return { pcm: bytes.buffer, sampleRate: rate ? Number(rate[1]) : 24000 };
+  }
+  throw new Error("unreachable");
+}

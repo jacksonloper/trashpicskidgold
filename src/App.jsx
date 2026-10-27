@@ -1377,7 +1377,8 @@ export default function App() {
       !trashOpen &&
       !settingsOpen &&
       !!activeSection,
-    activeSection
+    activeSection,
+    settings.geminiVoice ? apiKey : ""
   );
 
   /* ---- acting on what is in the trash ---- */
