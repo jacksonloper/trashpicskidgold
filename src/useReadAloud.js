@@ -46,9 +46,6 @@ function isReadKey(event) {
 
 /* ---- Gemini's voice ---- */
 
-/** How long P waits for Gemini before the browser's own voice reads instead. */
-const GEMINI_WAIT_MS = 5000;
-
 /** A page has to stay on screen this long before its reading is fetched ahead. */
 const PREFETCH_AFTER_MS = 1200;
 
@@ -87,6 +84,13 @@ function speechKey(text) {
   return sha256Hex(`${SPEECH_VOICE}\n${SPEECH_DIRECTION}\n${text}`);
 }
 
+/** The reading of `text` already on this computer, or null. */
+async function keptReading(text) {
+  const kept = await getSpeech(await speechKey(text)).catch(() => null);
+  if (kept) putSpeech({ ...kept, usedAt: Date.now() }).catch(() => {});
+  return kept;
+}
+
 /**
  * Gemini's reading of `text`: from the cache if it has been read before,
  * otherwise fetched and kept. The cache stays on this computer — it is not
@@ -94,12 +98,9 @@ function speechKey(text) {
  */
 function getReading(apiKey, text) {
   return (async () => {
+    const kept = await keptReading(text);
+    if (kept) return kept;
     const key = await speechKey(text);
-    const kept = await getSpeech(key).catch(() => null);
-    if (kept) {
-      putSpeech({ ...kept, usedAt: Date.now() }).catch(() => {});
-      return kept;
-    }
     if (!inFlight.has(key)) {
       const fetching = generateSpeech(apiKey, text)
         .then(async ({ pcm, sampleRate }) => {
@@ -163,11 +164,12 @@ export function stopReading() {
 }
 
 /**
- * Read `text` in Gemini's voice when it can, the browser's when it can't.
+ * Read `text` in Gemini's voice if its reading is already here, the
+ * browser's if not.
  *
- * A page read before plays at once from the cache. A new one waits a few
- * seconds for Gemini; past that, or on any failure, the browser reads it
- * instead, and Gemini's reading — if it still arrives — is kept for next time.
+ * A keypress never waits on the network: a page whose reading hasn't
+ * downloaded yet is read by the browser straight away, and its reading is
+ * fetched meanwhile so the next P plays it.
  */
 function readAloud(text, apiKey) {
   stopReading();
@@ -176,26 +178,17 @@ function readAloud(text, apiKey) {
     speakWithBrowser(text);
     return;
   }
-  let settled = false;
-  const fallBack = () => {
-    if (settled || mine !== generation) return;
-    settled = true;
-    speakWithBrowser(text);
-  };
-  const timer = setTimeout(fallBack, GEMINI_WAIT_MS);
-  getReading(apiKey, text).then(
-    (reading) => {
-      clearTimeout(timer);
-      if (settled || mine !== generation) return;
-      settled = true;
+  keptReading(text).then((reading) => {
+    if (mine !== generation) return;
+    if (reading) {
       playReading(reading);
-    },
-    (e) => {
-      clearTimeout(timer);
-      console.warn("Gemini couldn't read the page; the browser will", e);
-      fallBack();
+      return;
     }
-  );
+    speakWithBrowser(text);
+    getReading(apiKey, text).catch((e) =>
+      console.warn("Gemini couldn't read the page", e)
+    );
+  });
 }
 
 /**
@@ -207,7 +200,7 @@ function readAloud(text, apiKey) {
  *
  * With an API key the voice is Gemini's, which sounds like a person rather
  * than a machine. A page that sits on screen for a moment has its reading
- * fetched ahead, so P usually plays it without a wait.
+ * fetched ahead; until it has arrived, the browser's voice reads instead.
  *
  * Turning the page cuts the speech short — a caption still being read over a
  * different picture would be confusing — as does leaving the story.
