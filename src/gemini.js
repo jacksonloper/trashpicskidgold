@@ -954,8 +954,8 @@ export const SPEECH_VOICE = "Sulafat";
 
 /** What the reader is told before the words: how to read them. */
 export const SPEECH_DIRECTION =
-  "Read this aloud warmly and gently, at an easy pace, like a grown-up " +
-  "reading a picture book to a four-year-old:";
+  "Read this aloud warmly, at a natural pace, like a grown-up reading a " +
+  "picture book to a seven-year-old:";
 
 /**
  * Have Gemini read some words aloud.
