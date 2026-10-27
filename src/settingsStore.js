@@ -28,6 +28,9 @@ export const WAITING_GAMES = [
 
 export const DEFAULT_SETTINGS = Object.freeze({
   waitingGame: "letter",
+  // P reads in Gemini's voice (fetched with the API key) rather than the
+  // browser's own.
+  geminiVoice: true,
 });
 
 function isWaitingGame(id) {
@@ -45,6 +48,10 @@ export function loadSettings() {
       waitingGame: isWaitingGame(saved?.waitingGame)
         ? saved.waitingGame
         : DEFAULT_SETTINGS.waitingGame,
+      geminiVoice:
+        typeof saved?.geminiVoice === "boolean"
+          ? saved.geminiVoice
+          : DEFAULT_SETTINGS.geminiVoice,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
