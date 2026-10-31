@@ -32,6 +32,8 @@ const INTERVAL_MS = 3 * 60 * 1000;
  * folder against Drive's checksums; `verifyResult` is what it found.
  * `recordsByStoryId` is the backup store, reloaded after every backup or
  * check, so the story list can put a glyph beside each title.
+ * `folderId` is the app's top folder in Drive once a backup has made or
+ * found it, so Settings can link to it; null until then.
  *
  * `flushSave` is awaited before each backup so the newest keystroke is in
  * the database before it is read for upload.
@@ -96,7 +98,9 @@ export default function useDriveBackup({ flushSave }) {
         const result = await runBackup({ onProgress: setProgress });
         const at = Date.now();
         setSummary({ ...result, at });
-        setConfig((c) => ({ ...(c ?? {}), lastBackupAt: at }));
+        // The backup may have just made or found the top folder: pick up
+        // its id so Settings can link to it straight away.
+        setConfig({ ...(await loadDriveConfig()), lastBackupAt: at });
         if (result.failures.length) {
           setError(
             `${result.failures.length} ${result.failures.length === 1 ? "story" : "stories"} did not go up: ${result.failures.join("; ")}`
@@ -211,6 +215,7 @@ export default function useDriveBackup({ flushSave }) {
     summary,
     progress,
     lastBackupAt: config?.lastBackupAt ?? null,
+    folderId: config?.folderId ?? null,
     recordsByStoryId,
     verifying,
     verifyResult,

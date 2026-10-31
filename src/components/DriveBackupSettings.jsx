@@ -10,6 +10,12 @@
  */
 
 import { tallyBackups } from "../driveBackup/backupState";
+import { FOLDER_NAME } from "../driveBackup/runBackup";
+
+/** Where Drive shows a folder's contents in the browser. */
+function driveFolderUrl(folderId) {
+  return `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}`;
+}
 
 function relative(ts) {
   if (!ts) return "never";
@@ -69,6 +75,7 @@ export default function DriveBackupSettings({ drive, stories }) {
     summary,
     progress,
     lastBackupAt,
+    folderId,
     recordsByStoryId,
     verifying,
     verifyResult,
@@ -177,6 +184,19 @@ export default function DriveBackupSettings({ drive, stories }) {
               Disconnect
             </button>
           </div>
+          {folderId && (
+            <p className="settings-note">
+              The stories go to the{" "}
+              <a
+                href={driveFolderUrl(folderId)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {FOLDER_NAME} folder
+              </a>{" "}
+              in your Google Drive.
+            </p>
+          )}
           <p className="settings-note">
             <small>
               Beside each story&rsquo;s title: ✅ on Drive and checked, ⏳
