@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { IMAGE_MODELS } from "../gemini";
+import { IMAGE_MODELS } from "../imageProviders";
+import ImageModelOptions from "./ImageModelOptions";
 
 const KIND_OPTIONS = [
   { value: "character", label: "🧑 Character" },
@@ -140,11 +141,7 @@ export default function ReferenceGraphics({
                       value={imageModels[rg.id] || IMAGE_MODELS[0].id}
                       onChange={(e) => handleModelChange(rg.id, e.target.value)}
                     >
-                      {IMAGE_MODELS.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label}
-                        </option>
-                      ))}
+                      <ImageModelOptions />
                     </select>
                   </label>
                 </div>

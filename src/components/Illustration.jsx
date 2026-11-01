@@ -1,7 +1,9 @@
 import { useState } from "react";
 import GrowingTextarea from "./GrowingTextarea";
 import SectionHeader from "./SectionHeader";
-import { TEXT_MODELS, IMAGE_MODELS } from "../gemini";
+import { TEXT_MODELS } from "../gemini";
+import { IMAGE_MODELS } from "../imageProviders";
+import ImageModelOptions from "./ImageModelOptions";
 
 /*
  * A caption is one line of text, however many lines it takes to show.
@@ -90,11 +92,7 @@ export default function Illustration({
             value={imageModel}
             onChange={(e) => setImageModel(e.target.value)}
           >
-            {IMAGE_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
+            <ImageModelOptions />
           </select>
         </label>
       </div>

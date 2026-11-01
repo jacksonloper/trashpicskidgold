@@ -18,15 +18,13 @@ import ErrorDetailsModal from "./components/ErrorDetailsModal";
 import SettingsDialog from "./components/SettingsDialog";
 import { loadSettings, saveSettings } from "./settingsStore";
 import useDriveBackup from "./driveBackup/useDriveBackup";
-import {
-  buildRefGraphicPrompt,
-  planIllustration,
-  generateImage,
-  generateImageWithReferences,
-} from "./gemini";
+import { buildRefGraphicPrompt, planIllustration } from "./gemini";
+import { drawPicture, takesReferenceImages } from "./imageProviders";
 import {
   getApiKey,
   saveApiKey as persistApiKey,
+  getBedrockKey,
+  saveBedrockKey as persistBedrockKey,
   listStories,
   getStory,
   saveStory,
@@ -239,6 +237,14 @@ export default function App() {
   /* ---- top-level state ---- */
   const [apiKey, setApiKey] = useState("");
   const [apiKeySaved, setApiKeySaved] = useState(false);
+  // Optional: Stability AI's models on Amazon Bedrock, which only draw.
+  const [bedrockKey, setBedrockKey] = useState("");
+  const [bedrockKeySaved, setBedrockKeySaved] = useState(false);
+  // Both keys, for the one call that picks a provider by model.
+  const keys = useMemo(
+    () => ({ gemini: apiKey, bedrock: bedrockKey }),
+    [apiKey, bedrockKey]
+  );
   const [storyList, setStoryList] = useState([]); // [{id, title, updatedAt?}]
   const [activeStoryId, setActiveStoryId] = useState(null);
   const [activeSectionId, setActiveSectionId] = useState(null); // section on screen
@@ -398,6 +404,11 @@ export default function App() {
         if (key) {
           setApiKey(key);
           setApiKeySaved(true);
+        }
+        const bedrock = await getBedrockKey();
+        if (bedrock) {
+          setBedrockKey(bedrock);
+          setBedrockKeySaved(true);
         }
         const list = await listStories();
         setStoryList(list);
@@ -764,6 +775,20 @@ export default function App() {
     setApiKeySaved(false);
   }, []);
 
+  const handleSaveBedrockKey = useCallback(async () => {
+    try {
+      await persistBedrockKey(bedrockKey);
+      setBedrockKeySaved(true);
+    } catch (e) {
+      setError(asSnack(e, "Failed to save Bedrock key: "));
+    }
+  }, [bedrockKey]);
+
+  const handleBedrockKeyChange = useCallback((val) => {
+    setBedrockKey(val);
+    setBedrockKeySaved(false);
+  }, []);
+
   /* ---- title ---- */
 
   const handleTitleChange = useCallback(
@@ -999,7 +1024,7 @@ export default function App() {
       setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
       try {
         const prompt = buildRefGraphicPrompt(style, kind, userPrompt, label);
-        const dataUrl = await generateImage(apiKey, prompt, imageModel);
+        const dataUrl = await drawPicture(keys, prompt, [], imageModel);
         const imgId = newImageId();
         await saveImage({
           id: imgId,
@@ -1019,7 +1044,7 @@ export default function App() {
         setGeneratingRefIds((prev) => ({ ...prev, [rgId]: false }));
       }
     },
-    [apiKey, placePicture, settlePicture, style, story]
+    [keys, placePicture, settlePicture, style, story]
   );
 
   const handleUploadRefGraphic = useCallback(
@@ -1570,6 +1595,16 @@ export default function App() {
     async (sectionId, textModel) => {
       const sec = sections.find((x) => x.id === sectionId);
       if (!sec) return null;
+      // Planning is Gemini's job whichever model draws: a Bedrock key alone
+      // can make reference graphics, which need no plan, but not a page.
+      if (!apiKey.trim()) {
+        setError(
+          asSnack(
+            "Planning an illustration needs a Gemini API key — paste one in the key box. (A Bedrock key only draws.)"
+          )
+        );
+        return null;
+      }
       // A caption typed a moment ago is still sitting in the 500 ms debounce.
       // Planning takes seconds and can fail, so put the edit on disk first —
       // whatever the model does, the user's own words are already saved.
@@ -1628,9 +1663,13 @@ export default function App() {
       setGeneratingSections((prev) => ({ ...prev, [sectionId]: true }));
 
       try {
-        // Collect reference images from the plan
+        // Collect reference images from the plan — for a model that will
+        // look at them. Bedrock's draw from the prompt alone.
         const refImgs = [];
-        for (const imgId of plan.referenceImageIds) {
+        const wantRefs = takesReferenceImages(plan.imageModel)
+          ? plan.referenceImageIds
+          : [];
+        for (const imgId of wantRefs) {
           // May name an illustration from a page this session never opened.
           const dataUrl = allImages[imgId] ?? (await getImage(imgId))?.data;
           if (dataUrl) {
@@ -1640,8 +1679,8 @@ export default function App() {
           }
         }
 
-        const dataUrl = await generateImageWithReferences(
-          apiKey,
+        const dataUrl = await drawPicture(
+          keys,
           plan.prompt,
           refImgs,
           plan.imageModel
@@ -1672,7 +1711,7 @@ export default function App() {
         setGeneratingSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [apiKey, allImages, flushSave, placePicture, sections, settlePicture, story]
+    [keys, allImages, flushSave, placePicture, sections, settlePicture, story]
   );
 
   /** Plan only, then open the review modal. */
@@ -1827,6 +1866,10 @@ export default function App() {
             onApiKeyChange={handleApiKeyChange}
             onSaveKey={handleSaveApiKey}
             saved={apiKeySaved}
+            bedrockKey={bedrockKey}
+            onBedrockKeyChange={handleBedrockKeyChange}
+            onSaveBedrockKey={handleSaveBedrockKey}
+            bedrockSaved={bedrockKeySaved}
           />
 
           {!story && (
@@ -1876,7 +1919,7 @@ export default function App() {
                 onGenerate={handleGenerateRefGraphic}
                 onUpload={handleUploadRefGraphic}
                 generatingIds={generatingRefIds}
-                disabled={!apiKey.trim()}
+                disabled={!apiKey.trim() && !bedrockKey.trim()}
               />
 
               {/* The one open section, the one the index points at */}
