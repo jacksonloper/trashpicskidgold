@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
 import { WAITING_GAMES } from "../settingsStore";
+import { IMAGE_MODEL_GROUPS } from "../imageProviders";
 import DriveBackupSettings from "./DriveBackupSettings";
 import ForgetComputer from "./ForgetComputer";
 
 /**
- * The grown-up's settings: which game the waiting letter plays while a
- * picture is being made, whose voice reads a page aloud, and whether the
- * stories are backed up to Google Drive.
+ * The grown-up's settings: which model draws the pictures, which game the
+ * waiting letter plays while one is being made, whose voice reads a page
+ * aloud, and whether the stories are backed up to Google Drive.
  *
  * Escape or a click outside closes it. A change takes effect as soon as it is
  * clicked — there is nothing to save, and nothing here can lose work. Free
@@ -19,6 +20,7 @@ export default function SettingsDialog({
   onClose,
   drive,
   stories,
+  hasKey,
 }) {
   const closeRef = useRef(null);
 
@@ -41,6 +43,49 @@ export default function SettingsDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="settings-title">⚙️ Settings</h3>
+
+        <fieldset className="settings-group">
+          <legend className="plan-label">Draw pictures with</legend>
+          {IMAGE_MODEL_GROUPS.map((g) => {
+            const keyed = !!hasKey?.[g.provider];
+            return (
+              <div key={g.provider} className="settings-subgroup">
+                <p className="settings-subhead">{g.label}</p>
+                {g.models.map((m) => (
+                  <label
+                    key={m.id}
+                    className={`settings-option${keyed ? "" : " settings-option-off"}`}
+                  >
+                    <input
+                      type="radio"
+                      name="image-model"
+                      value={m.id}
+                      checked={settings.imageModel === m.id}
+                      disabled={!keyed}
+                      onChange={() =>
+                        onChange({ ...settings, imageModel: m.id })
+                      }
+                    />
+                    <span>
+                      <strong>{m.label}</strong>
+                      <small>
+                        {m.description}
+                        {!keyed &&
+                          (g.provider === "bedrock"
+                            ? " Needs a Bedrock API key, pasted under the Gemini key box."
+                            : " Needs a Gemini API key.")}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            );
+          })}
+          <p className="confirm-note">
+            The picker on each page, reference graphic and plan review starts
+            on this one; any single picture can still be drawn with another.
+          </p>
+        </fieldset>
 
         <fieldset className="settings-group">
           <legend className="plan-label">Game while a picture is made</legend>

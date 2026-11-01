@@ -2,7 +2,6 @@ import { useState } from "react";
 import GrowingTextarea from "./GrowingTextarea";
 import SectionHeader from "./SectionHeader";
 import { TEXT_MODELS } from "../gemini";
-import { IMAGE_MODELS } from "../imageProviders";
 import ImageModelOptions from "./ImageModelOptions";
 
 /*
@@ -33,9 +32,12 @@ export default function Illustration({
   onMoveUp,
   onMoveDown,
   onImageShown,
+  defaultImageModel,
 }) {
   const [textModel, setTextModel] = useState(TEXT_MODELS[0].id);
-  const [imageModel, setImageModel] = useState(IMAGE_MODELS[0].id);
+  // The Settings default, until this page picks another for itself.
+  const [imageModelPick, setImageModel] = useState(null);
+  const imageModel = imageModelPick ?? defaultImageModel;
   const canGenerate = !generating && !planning && caption.trim().length > 0;
 
   const handleFileChange = (e) => {

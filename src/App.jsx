@@ -1920,6 +1920,7 @@ export default function App() {
                 onUpload={handleUploadRefGraphic}
                 generatingIds={generatingRefIds}
                 disabled={!apiKey.trim() && !bedrockKey.trim()}
+                defaultImageModel={settings.imageModel}
               />
 
               {/* The one open section, the one the index points at */}
@@ -2015,6 +2016,7 @@ export default function App() {
                           ? () => moveSection(activeSection.id, 1)
                           : null
                       }
+                      defaultImageModel={settings.imageModel}
                     />
                   )}
                 </div>
@@ -2088,6 +2090,7 @@ export default function App() {
           onClose={handleCloseSettings}
           drive={drive}
           stories={storyList}
+          hasKey={{ gemini: !!apiKey.trim(), bedrock: !!bedrockKey.trim() }}
         />
       )}
 
@@ -2110,6 +2113,7 @@ export default function App() {
           sections={sections}
           onApprove={handleApproveIllustration}
           onCancel={handleCancelPlan}
+          defaultImageModel={settings.imageModel}
         />
       )}
 

@@ -1890,6 +1890,27 @@
   line-height: 1.35;
 }
 
+/* The image models, one run per provider under its name. */
+.settings-subgroup + .settings-subgroup {
+  margin-top: 0.75rem;
+}
+
+.settings-subhead {
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* A model whose provider has no key: listed, so the grown-up knows it is
+   there, but not for choosing. */
+.settings-option-off {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* ---- Google Drive sync ---- */
 
 .settings-note {

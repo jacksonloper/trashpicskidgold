@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IMAGE_MODELS, takesReferenceImages } from "../imageProviders";
+import { takesReferenceImages } from "../imageProviders";
 import ImageModelOptions from "./ImageModelOptions";
 
 /**
@@ -28,14 +28,16 @@ export default function IllustrationPlanModal({
   sections,
   onApprove,
   onCancel,
+  defaultImageModel,
 }) {
   const [prompt, setPrompt] = useState(plan.prompt);
   const [selectedIds, setSelectedIds] = useState(
     () => new Set(plan.referenceImageIds)
   );
-  // Reopened after a failed generation, the plan carries the model they picked.
+  // Reopened after a failed generation, the plan carries the model they
+  // picked; a fresh plan starts on the Settings default.
   const [imageModel, setImageModel] = useState(
-    plan.imageModel || IMAGE_MODELS[0].id
+    plan.imageModel || defaultImageModel
   );
 
   // Build a list of all candidate images (ref graphics + existing illustrations)

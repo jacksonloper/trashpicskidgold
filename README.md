@@ -4,7 +4,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 
 ## Features
 
-- **BYOK (Bring Your Own Key)** — paste your Gemini API key, and optionally an Amazon Bedrock API key for Stability AI's image models; nothing is stored on a server
+- **BYOK (Bring Your Own Key)** — paste your Gemini API key, and optionally an Amazon Bedrock API key for Stability AI's image models; nothing is stored on a server. Settings picks which model draws by default
 - **Character Sheet** — define up to 4 characters with names and descriptions, then generate a character model sheet
 - **Story Pages** — add illustrated pages with captions; each illustration uses the character sheet as a visual reference for consistency
 - **Keyboard-first navigation** — the story index sits down the left on a wide screen; `\` (or one `Tab`) reaches it, then `↑`/`↓` turn pages and land with the illustration fully in view (`Alt`+`↑`/`↓` while you type; hold either to go faster)
@@ -111,7 +111,11 @@ Stability AI's image models on Amazon Bedrock — Stable Image Core, Stable
 Diffusion 3.5 Large and Stable Image Ultra — which draw in a different hand
 and run a different set of filters, so a page one of them will not draw the
 other often will. They appear in every image-model picker under their own
-heading once there is a key for them.
+heading. **⚙️ Settings → Draw pictures with** chooses the model every picker
+starts on — a Gemini or a Bedrock one, each with a line on what it is good
+for, and the ones without a key greyed out — so switching the whole story to
+Bedrock is one click rather than one per page; any single picture can still
+be drawn with another model from its own picker.
 
 The key is a **Bedrock API key**, made in the AWS console under Amazon
 Bedrock → API keys (the [AWS guide](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html)

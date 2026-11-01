@@ -1,10 +1,19 @@
 const DEFAULT_IMAGE_MODEL = "gemini-3-pro-image-preview";
 const DEFAULT_TEXT_MODEL = "gemini-3-pro-image-preview";
 
-/** Model options for image generation. */
+/** Model options for image generation. The description is for Settings. */
 export const IMAGE_MODELS = [
-  { id: "gemini-3-pro-image-preview", label: "Quality (slower)" },
-  { id: "gemini-2.5-flash-image", label: "Fast" },
+  {
+    id: "gemini-3-pro-image-preview",
+    label: "Quality (slower)",
+    description:
+      "Gemini's best. It is shown the reference pictures, so characters stay themselves from page to page.",
+  },
+  {
+    id: "gemini-2.5-flash-image",
+    label: "Fast",
+    description: "Gemini, quicker and cheaper; also shown the reference pictures.",
+  },
 ];
 
 /** Model options for text-based planning. */

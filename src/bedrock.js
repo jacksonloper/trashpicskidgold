@@ -20,9 +20,21 @@ const REGION = "us-west-2";
  * All three take the same request and give the same reply.
  */
 export const IMAGE_MODELS = [
-  { id: "stability.stable-image-core-v1:1", label: "Stable Image Core (fast)" },
-  { id: "stability.sd3-5-large-v1:0", label: "Stable Diffusion 3.5 Large" },
-  { id: "stability.stable-image-ultra-v1:1", label: "Stable Image Ultra (slow)" },
+  {
+    id: "stability.stable-image-core-v1:1",
+    label: "Stable Image Core (fast)",
+    description: "Stability AI, quick. Draws from the prompt alone.",
+  },
+  {
+    id: "stability.sd3-5-large-v1:0",
+    label: "Stable Diffusion 3.5 Large",
+    description: "Stability AI, more detail. Draws from the prompt alone.",
+  },
+  {
+    id: "stability.stable-image-ultra-v1:1",
+    label: "Stable Image Ultra (slow)",
+    description: "Stability AI's best and slowest. Draws from the prompt alone.",
+  },
 ];
 
 /** True if `id` is one of ours — the picker mixes providers in one list. */
