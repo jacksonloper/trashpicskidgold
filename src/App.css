@@ -486,13 +486,25 @@
   inset: 0;
   z-index: 9999;
   display: flex;
-  align-items: center;
   justify-content: center;
+  /* The dialog is taller than a phone's screen. Centred with align-items it
+     would overflow off the top and the bottom alike, with the Enter button
+     under the browser's toolbar and no way to scroll to it. So the overlay
+     scrolls, the dialog centres itself only when there is room (margin:
+     auto), and a generous margin above and below keeps the button clear of
+     the toolbar and the home-indicator strip. */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  padding: max(2.5rem, env(safe-area-inset-top)) 0
+    calc(3rem + env(safe-area-inset-bottom));
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(4px);
 }
 
 .age-gate-dialog {
+  margin: auto;
+  flex-shrink: 0;
   background: #fff;
   border-radius: 14px;
   padding: 2rem 2.5rem;
@@ -500,6 +512,12 @@
   width: 90%;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
   text-align: left;
+}
+
+@media (max-width: 480px) {
+  .age-gate-dialog {
+    padding: 1.5rem 1.25rem;
+  }
 }
 
 .age-gate-dialog h2 {
