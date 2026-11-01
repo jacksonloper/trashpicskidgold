@@ -115,9 +115,11 @@ heading once there is a key for them.
 
 The key is a **Bedrock API key**, made in the AWS console under Amazon
 Bedrock → API keys (the [AWS guide](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html)
-walks through it). Generate it with the console set to **US West (Oregon),
-us-west-2**: a key only works in the region it was generated in, and that is
-where the app calls. Each key the console generates comes with its own IAM
+walks through it). Choose a **long-term** key: it is an IAM credential, so it
+works in any region, including the us-west-2 endpoint the app calls, whatever
+region the console was showing. A short-term key lasts twelve hours and works
+only in the region it was generated from, so it is the wrong kind for a key
+pasted once. Each long-term key the console generates comes with its own IAM
 user, named `BedrockAPIKey-…`, holding nothing but that key and the
 `AmazonBedrockLimitedAccess` policy; deleting the user revokes the key. It is
 not an IAM access key. The box for it is folded under
