@@ -3,6 +3,8 @@
  * they survive a reload. Nothing here is a story: losing it costs a click.
  */
 
+import { IMAGE_MODELS } from "./imageProviders";
+
 const STORAGE_KEY = "storymaker_settings";
 
 /** The games the waiting letter can play. */
@@ -31,10 +33,17 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // P reads in Gemini's voice (fetched with the API key) rather than the
   // browser's own.
   geminiVoice: true,
+  // What the image-model pickers start on. Each page, reference graphic and
+  // plan review can still pick another for one picture.
+  imageModel: IMAGE_MODELS[0].id,
 });
 
 function isWaitingGame(id) {
   return WAITING_GAMES.some((g) => g.id === id);
+}
+
+function isImageModel(id) {
+  return IMAGE_MODELS.some((m) => m.id === id);
 }
 
 /** Whatever was saved, on top of the defaults, with anything unknown dropped. */
@@ -52,6 +61,10 @@ export function loadSettings() {
         typeof saved?.geminiVoice === "boolean"
           ? saved.geminiVoice
           : DEFAULT_SETTINGS.geminiVoice,
+      // A model that has since been retired falls back to the default.
+      imageModel: isImageModel(saved?.imageModel)
+        ? saved.imageModel
+        : DEFAULT_SETTINGS.imageModel,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

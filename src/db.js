@@ -193,6 +193,16 @@ export async function saveApiKey(value) {
   await put("settings", { key: "apiKey", value });
 }
 
+/** The optional Amazon Bedrock key, kept beside Gemini's and never backed up. */
+export async function getBedrockKey() {
+  const rec = await get("settings", "bedrockApiKey");
+  return rec?.value ?? "";
+}
+
+export async function saveBedrockKey(value) {
+  await put("settings", { key: "bedrockApiKey", value });
+}
+
 /* ---- stories ---- */
 
 export function newStoryId() {

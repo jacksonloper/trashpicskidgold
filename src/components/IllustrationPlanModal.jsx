@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { IMAGE_MODELS } from "../gemini";
+import { takesReferenceImages } from "../imageProviders";
+import ImageModelOptions from "./ImageModelOptions";
 
 /**
  * Modal shown after the AI plans an illustration.
@@ -27,14 +28,16 @@ export default function IllustrationPlanModal({
   sections,
   onApprove,
   onCancel,
+  defaultImageModel,
 }) {
   const [prompt, setPrompt] = useState(plan.prompt);
   const [selectedIds, setSelectedIds] = useState(
     () => new Set(plan.referenceImageIds)
   );
-  // Reopened after a failed generation, the plan carries the model they picked.
+  // Reopened after a failed generation, the plan carries the model they
+  // picked; a fresh plan starts on the Settings default.
   const [imageModel, setImageModel] = useState(
-    plan.imageModel || IMAGE_MODELS[0].id
+    plan.imageModel || defaultImageModel
   );
 
   // Build a list of all candidate images (ref graphics + existing illustrations)
@@ -128,12 +131,15 @@ export default function IllustrationPlanModal({
             value={imageModel}
             onChange={(e) => setImageModel(e.target.value)}
           >
-            {IMAGE_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
+            <ImageModelOptions />
           </select>
+          {!takesReferenceImages(imageModel) && (
+            <p className="plan-model-note">
+              This model draws from the prompt alone: the reference pictures
+              ticked above won&apos;t be sent. Check the prompt describes each
+              character the way the pictures show them.
+            </p>
+          )}
         </div>
 
         <div className="plan-modal-buttons">

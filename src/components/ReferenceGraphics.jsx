@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IMAGE_MODELS } from "../gemini";
+import ImageModelOptions from "./ImageModelOptions";
 
 const KIND_OPTIONS = [
   { value: "character", label: "🧑 Character" },
@@ -18,6 +18,7 @@ export default function ReferenceGraphics({
   onUpload,
   generatingIds,
   disabled,
+  defaultImageModel,
 }) {
   const [expandedId, setExpandedId] = useState(null);
   const [prompts, setPrompts] = useState({});
@@ -34,7 +35,7 @@ export default function ReferenceGraphics({
   const handleGenerate = (rg) => {
     const prompt =
       prompts[rg.id] !== undefined ? prompts[rg.id] : rg.prompt || "";
-    const model = imageModels[rg.id] || IMAGE_MODELS[0].id;
+    const model = imageModels[rg.id] || defaultImageModel;
     if (prompt.trim()) onGenerate(rg.id, rg.kind, prompt, model, rg.label);
   };
 
@@ -137,14 +138,10 @@ export default function ReferenceGraphics({
                   <label className="model-select-label">
                     Image model
                     <select
-                      value={imageModels[rg.id] || IMAGE_MODELS[0].id}
+                      value={imageModels[rg.id] || defaultImageModel}
                       onChange={(e) => handleModelChange(rg.id, e.target.value)}
                     >
-                      {IMAGE_MODELS.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label}
-                        </option>
-                      ))}
+                      <ImageModelOptions />
                     </select>
                   </label>
                 </div>

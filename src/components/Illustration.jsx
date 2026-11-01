@@ -1,7 +1,8 @@
 import { useState } from "react";
 import GrowingTextarea from "./GrowingTextarea";
 import SectionHeader from "./SectionHeader";
-import { TEXT_MODELS, IMAGE_MODELS } from "../gemini";
+import { TEXT_MODELS } from "../gemini";
+import ImageModelOptions from "./ImageModelOptions";
 
 /*
  * A caption is one line of text, however many lines it takes to show.
@@ -31,9 +32,12 @@ export default function Illustration({
   onMoveUp,
   onMoveDown,
   onImageShown,
+  defaultImageModel,
 }) {
   const [textModel, setTextModel] = useState(TEXT_MODELS[0].id);
-  const [imageModel, setImageModel] = useState(IMAGE_MODELS[0].id);
+  // The Settings default, until this page picks another for itself.
+  const [imageModelPick, setImageModel] = useState(null);
+  const imageModel = imageModelPick ?? defaultImageModel;
   const canGenerate = !generating && !planning && caption.trim().length > 0;
 
   const handleFileChange = (e) => {
@@ -90,11 +94,7 @@ export default function Illustration({
             value={imageModel}
             onChange={(e) => setImageModel(e.target.value)}
           >
-            {IMAGE_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
+            <ImageModelOptions />
           </select>
         </label>
       </div>

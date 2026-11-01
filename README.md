@@ -4,7 +4,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 
 ## Features
 
-- **BYOK (Bring Your Own Key)** — paste your Gemini API key; nothing is stored on a server
+- **BYOK (Bring Your Own Key)** — paste your Gemini API key, and optionally an Amazon Bedrock API key for Stability AI's image models; nothing is stored on a server. Settings picks which model draws by default
 - **Character Sheet** — define up to 4 characters with names and descriptions, then generate a character model sheet
 - **Story Pages** — add illustrated pages with captions; each illustration uses the character sheet as a visual reference for consistency
 - **Keyboard-first navigation** — the story index sits down the left on a wide screen; `\` (or one `Tab`) reaches it, then `↑`/`↓` turn pages and land with the illustration fully in view (`Alt`+`↑`/`↓` while you type; hold either to go faster)
@@ -103,6 +103,56 @@ waiting letter stands aside for it like any other dialog, and `Esc` closes it.
 The detail rides along on the error itself (`GeminiError` in `src/gemini.js`),
 so a failure that has nothing more to say simply doesn't offer the button — a
 file that wouldn't open is already its own explanation.
+
+## Drawing with Amazon Bedrock
+
+Gemini is the app's artist, planner and reader. Optionally, a second artist:
+Stability AI's image models on Amazon Bedrock — Stable Image Core, Stable
+Diffusion 3.5 Large and Stable Image Ultra — which draw in a different hand
+and run a different set of filters, so a page one of them will not draw the
+other often will. They appear in every image-model picker under their own
+heading. **⚙️ Settings → Draw pictures with** chooses the model every picker
+starts on — a Gemini or a Bedrock one, each with a line on what it is good
+for, and the ones without a key greyed out — so switching the whole story to
+Bedrock is one click rather than one per page; any single picture can still
+be drawn with another model from its own picker.
+
+The key is a **Bedrock API key**, made in the AWS console under Amazon
+Bedrock → API keys (the [AWS guide](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html)
+walks through it). Choose a **long-term** key: it is an IAM credential, so it
+works in any region, including the us-west-2 endpoint the app calls, whatever
+region the console was showing. A short-term key lasts twelve hours and works
+only in the region it was generated from, so it is the wrong kind for a key
+pasted once. Each long-term key the console generates comes with its own IAM
+user, named `BedrockAPIKey-…`, holding nothing but that key and the
+`AmazonBedrockLimitedAccess` policy; deleting the user revokes the key. It is
+not an IAM access key. The box for it is folded under
+the Gemini key box as *Also draw with AWS Bedrock*; like the Gemini key it is
+kept in the browser's IndexedDB, sent only to the provider it belongs to, never
+backed up, and destroyed by *Leaving a computer*. A long-term key lasts until
+the expiry you give it; a short-term one, twelve hours. Each picture is billed
+to the AWS account that made the key — a few cents, more for Ultra.
+
+The call goes straight from the browser to `bedrock-runtime.us-west-2.amazonaws.com`
+with the key as a bearer token: no SDK, no signing, no server of ours. Text-to-image
+is served from us-west-2 only, so that region is fixed. What is different from Gemini:
+
+- **These models read the prompt and nothing else.** They cannot take the
+  character sheets and earlier pages Gemini is shown for consistency. The
+  planner still writes the prompt from them — it describes each character as
+  the pictures show them — and the plan review modal says, beside the picker,
+  that the ticked pictures will not be sent. For the most consistent
+  characters, keep to Gemini; for a page Gemini will not draw, this is the
+  other door.
+- **Planning and reading aloud still need a Gemini key.** With only a Bedrock
+  key, reference graphics can be generated (they need no plan) but a page
+  cannot; the banner says so.
+- **A refusal looks different.** Stability's filter answers with a picture-shaped
+  reply whose `finish_reasons` names the filter, and whether it stopped the
+  prompt or held back the finished picture. The app reads that and puts it
+  behind **What happened?** like any Gemini refusal, with the same advice.
+- **Text in pictures** is these models' habit, so every request carries a
+  negative prompt against captions, watermarks and signatures.
 
 ## The trash
 
@@ -238,7 +288,7 @@ story ids: the same ZIP restored into two browsers would otherwise back up
 into one folder, each overwriting the other's `story.json`. With it, they get
 `the-lost-star` and `the-lost-star-2`.
 Pictures over a few megabytes go up by Drive's resumable protocol. The trash
-is not backed up, and neither is the API key.
+is not backed up, and neither are the API keys.
 
 Once connected, the open tab backs up every three minutes, whenever it is
 hidden, and on **Back up now**. Nothing in the kid's half of the app changes:
@@ -313,7 +363,7 @@ Two things in **⚙️ Settings → Leaving this computer**, for two moments:
   forgotten computer's next backup is refused and its cookie cleared. The
   stories already in that computer's browser are not touched by this.
 - **Remembered before leaving.** **Forget everything on this computer**
-  destroys every story and picture in the browser, the trash, the API key,
+  destroys every story and picture in the browser, the trash, the API keys,
   the settings and the Google sign-in, then reloads to the entrance page.
   Copies in Google Drive stay. It is the one thing in the app that destroys
   story text, so it sits behind a whole sentence typed out —
@@ -386,7 +436,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) and paste a [Gemini API key](https://aistudio.google.com/app/apikey) to get started.
+Open [http://localhost:5173](http://localhost:5173) and paste a [Gemini API key](https://aistudio.google.com/app/apikey) to get started. A [Bedrock API key](#drawing-with-amazon-bedrock) is optional.
 
 ## Deploy
 
