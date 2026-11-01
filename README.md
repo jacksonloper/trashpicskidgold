@@ -115,7 +115,12 @@ heading once there is a key for them.
 
 The key is a **Bedrock API key**, made in the AWS console under Amazon
 Bedrock → API keys (the [AWS guide](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html)
-walks through it). It is not an IAM access key. The box for it is folded under
+walks through it). Generate it with the console set to **US West (Oregon),
+us-west-2**: a key only works in the region it was generated in, and that is
+where the app calls. Each key the console generates comes with its own IAM
+user, named `BedrockAPIKey-…`, holding nothing but that key and the
+`AmazonBedrockLimitedAccess` policy; deleting the user revokes the key. It is
+not an IAM access key. The box for it is folded under
 the Gemini key box as *Also draw with AWS Bedrock*; like the Gemini key it is
 kept in the browser's IndexedDB, sent only to the provider it belongs to, never
 backed up, and destroyed by *Leaving a computer*. A long-term key lasts until

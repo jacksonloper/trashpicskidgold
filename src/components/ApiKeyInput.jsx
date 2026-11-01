@@ -101,8 +101,10 @@ export default function ApiKeyInput({
           >
             Amazon Bedrock → API keys
           </a>{" "}
-          in the AWS console; each picture is billed to your AWS account, a
-          few cents apiece. These models draw from the prompt alone and
+          in the AWS console, with the console set to US West (Oregon):
+          a key only works in the region it was made in, and these models
+          live there. Each picture is billed to your AWS account, a few
+          cents apiece. These models draw from the prompt alone and
           don&apos;t look at reference pictures. Planning and reading aloud
           still use Gemini.
         </p>
