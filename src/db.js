@@ -682,6 +682,33 @@ export async function putSpeech(record) {
   });
 }
 
+/**
+ * Let go of the readings under these keys, in one transaction. Resolves
+ * with how many were actually there: the readings of a story the kid has
+ * never had read aloud leave nothing to forget.
+ */
+export async function deleteSpeech(keys) {
+  if (keys.length === 0) return 0;
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("speech", "readwrite");
+    const store = tx.objectStore("speech");
+    let found = 0;
+    for (const key of keys) {
+      const req = store.count(key);
+      req.onsuccess = () => {
+        if (req.result > 0) {
+          found += 1;
+          store.delete(key);
+        }
+      };
+    }
+    tx.oncomplete = () => resolve(found);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error("aborted"));
+  });
+}
+
 /* ---- forgetting this computer ---- */
 
 /**

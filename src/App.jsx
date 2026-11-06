@@ -10,6 +10,7 @@ import IllustrationPlanModal from "./components/IllustrationPlanModal";
 import MarkdownSection from "./components/MarkdownSection";
 import SectionIndex from "./components/SectionIndex";
 import ExportButtons from "./components/ExportButtons";
+import ReadAloudCard from "./components/ReadAloudCard";
 import ConfirmDialog from "./components/ConfirmDialog";
 import UndoToast from "./components/UndoToast";
 import TrashBin from "./components/TrashBin";
@@ -2064,6 +2065,12 @@ export default function App() {
                   )}
                 </div>
               )}
+
+              {/* Read aloud */}
+              <ReadAloudCard
+                story={story}
+                enabled={settings.geminiVoice && !!apiKey?.trim()}
+              />
 
               {/* Export */}
               <ExportButtons story={story} />
