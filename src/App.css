@@ -632,8 +632,78 @@
   margin-top: 0.5rem;
 }
 
-.ref-upload-label {
+/* ---- Upload box ----
+   One dialog for everything that comes in from outside: a file dragged onto
+   it, a picture pasted into it, or the picker behind it. The dashed box is
+   the target and the button; the overlay around it takes a drop too. */
+
+.upload-modal {
+  max-width: 520px;
+}
+
+.upload-dropzone {
+  margin-top: 0.75rem;
+  padding: 2rem 1.5rem;
+  border: 3px dashed #bbb;
+  border-radius: 12px;
+  background: #fafafa;
+  text-align: center;
   cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.upload-dropzone:hover,
+.upload-dropzone:focus-visible {
+  border-color: #4285f4;
+  background: #f3f7ff;
+}
+
+.upload-dropzone.is-over {
+  border-color: #4285f4;
+  border-style: solid;
+  background: #e8f0fe;
+}
+
+.upload-dropzone-icon {
+  font-size: 2.4rem;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.upload-dropzone-main {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.upload-dropzone-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.upload-dropzone-hint kbd {
+  font-family: inherit;
+  font-size: 0.8em;
+  padding: 0.05em 0.35em;
+  border: 1px solid #ccc;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.upload-note {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  color: #8a6100;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 8px;
 }
 
 .ref-graphic-prompt-area {

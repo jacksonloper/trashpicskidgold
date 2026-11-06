@@ -15,6 +15,7 @@ A lightweight React + Vite app for creating illustrated children's stories with 
 - **Trash bin** — a picture removed from a story is never destroyed on the spot; it waits in the trash until you empty it yourself, and any page can pull one back out
 - **Stories that stay put** — the app asks the browser to keep its storage *persistent*, so stories and pictures aren't evicted when the disk runs low; only clearing the site's data removes them (Safari may still clear a site that isn't on the Home Screen, so export what matters)
 - **Export / Import** — download a story as a ZIP and load it back later, on any machine
+- **One box for anything that comes in** — every upload (a story ZIP for Import, a picture for a reference graphic or a page) opens the same box: drag the file onto it, paste it from the clipboard (a screenshot, an image copied off a web page), or click it for the ordinary file picker. A paste or drop that isn't what the box wants says so and waits for another try
 - **Google Drive backup** — optional and write-only: every few minutes whatever changed is written to a *trashpicskidgold* folder in your Drive, laid out so a story's folder zips straight back into Import, with each picture sent once and every version of the words kept
 - **Netlify-ready** — deploys with `netlify.toml` included
 
@@ -132,7 +133,8 @@ the two generate buttons every illustration page carries a pair of small,
 deliberately quiet ones:
 
 - **📁 Upload illustration** — put a picture from your own computer on this
-  page. No API call, no waiting.
+  page: drop it into the box that opens, paste it from the clipboard, or pick
+  it. No API call, no waiting.
 - **🗑️ Take illustration from trash** — opens the same bin as a picker, showing
   how many pictures are in it, and drops the one you choose onto this page.
   Greyed out while the trash is empty.
@@ -156,7 +158,8 @@ first if you want it in the bundle.
 Stories live only in the browser's IndexedDB, so the ZIP that **Export → Download
 ZIP** produces is the backup you hold in your hand (the Google Drive backup
 below is the other). **Import** in the navbar reads those
-same ZIPs back — pick several at once to restore a whole shelf of stories.
+same ZIPs back — drop several at once into the box it opens (or paste them,
+or pick them) to restore a whole shelf of stories.
 
 The layout (`src/storyBundle.js` is the single source of truth for both
 directions):

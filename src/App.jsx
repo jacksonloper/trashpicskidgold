@@ -16,6 +16,7 @@ import TrashBin from "./components/TrashBin";
 import WaitingGame from "./components/WaitingGame";
 import ErrorDetailsModal from "./components/ErrorDetailsModal";
 import SettingsDialog from "./components/SettingsDialog";
+import UploadDropzone from "./components/UploadDropzone";
 import { loadSettings, saveSettings } from "./settingsStore";
 import useDriveBackup from "./driveBackup/useDriveBackup";
 import {
@@ -235,6 +236,17 @@ function asSnack(e, prefix = "") {
   };
 }
 
+/** A File as the data URL the images store keeps. */
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("The browser could not read the file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function App() {
   /* ---- top-level state ---- */
   const [apiKey, setApiKey] = useState("");
@@ -268,6 +280,13 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
   const [importing, setImporting] = useState(false);
+  /*
+   * Where the next file put into the app should go, while the upload box is
+   * open: a story ZIP for Import, a picture for a reference graphic, a
+   * picture for a page. One box serves all three; this says which.
+   *   { kind: "import" } | { kind: "ref", id } | { kind: "page", sectionId }
+   */
+  const [uploadRequest, setUploadRequest] = useState(null);
   const [importNote, setImportNote] = useState(null);
   const [confirm, setConfirm] = useState(null); // pending destructive action
   const [undo, setUndo] = useState(null); // last reversible deletion
@@ -1274,6 +1293,69 @@ export default function App() {
     [placePicture, sections, settlePicture, story]
   );
 
+  /* ---- the upload box ---- */
+
+  const closeUpload = useCallback(() => setUploadRequest(null), []);
+
+  /**
+   * Files out of the upload box, sent wherever it was opened for.
+   *
+   * Import takes the whole batch; a picture slot takes the first file, read
+   * into a data URL the way the old hidden picker did.
+   */
+  const handleUploadFiles = useCallback(
+    async (files) => {
+      const request = uploadRequest;
+      setUploadRequest(null);
+      if (!request || files.length === 0) return;
+      if (request.kind === "import") {
+        handleImport(files);
+        return;
+      }
+      let dataUrl;
+      try {
+        dataUrl = await readAsDataUrl(files[0]);
+      } catch (err) {
+        setError(asSnack(err, "Could not read that picture: "));
+        return;
+      }
+      if (request.kind === "ref") handleUploadRefGraphic(request.id, dataUrl);
+      else if (request.kind === "page")
+        handleUploadIllustration(request.sectionId, dataUrl);
+    },
+    [handleImport, handleUploadIllustration, handleUploadRefGraphic, uploadRequest]
+  );
+
+  /** What the box says and takes, for the slot it was opened for. */
+  const uploadBoxProps = useMemo(() => {
+    if (!uploadRequest) return null;
+    if (uploadRequest.kind === "import") {
+      return {
+        title: "📥 Import stories",
+        accept: ".zip,application/zip",
+        multiple: true,
+        noun: "a story ZIP",
+      };
+    }
+    if (uploadRequest.kind === "ref") {
+      const rg = referenceGraphics.find((x) => x.id === uploadRequest.id);
+      const name = rg?.label?.trim();
+      return {
+        title: name
+          ? `🖼️ Picture for ${name}`
+          : "🖼️ Picture for this reference graphic",
+        accept: "image/*",
+        noun: "a picture",
+      };
+    }
+    const idx = sections.findIndex((x) => x.id === uploadRequest.sectionId);
+    return {
+      title: idx === -1 ? "🖼️ Picture for this page" : `🖼️ Picture for page ${idx + 1}`,
+      accept: "image/*",
+      noun: "a picture",
+    };
+  }, [referenceGraphics, sections, uploadRequest]);
+
   /* ---- section navigation ---- */
 
   const handleSelectSection = useCallback(
@@ -1344,7 +1426,8 @@ export default function App() {
       !!confirm ||
       trashOpen ||
       errorDetailsOpen ||
-      settingsOpen,
+      settingsOpen ||
+      !!uploadRequest,
   });
 
   // Waving the game off is also how free play ends.
@@ -1364,6 +1447,7 @@ export default function App() {
       !confirm &&
       !trashOpen &&
       !settingsOpen &&
+      !uploadRequest &&
       sections.length > 0,
     navigateSections
   );
@@ -1376,6 +1460,7 @@ export default function App() {
       !confirm &&
       !trashOpen &&
       !settingsOpen &&
+      !uploadRequest &&
       !!activeSection,
     activeSection,
     settings.geminiVoice ? apiKey : ""
@@ -1778,7 +1863,7 @@ export default function App() {
         onDeleteStory={handleRequestDeleteStory}
         onLoadExample={handleLoadExample}
         loadingExample={loadingExample}
-        onImport={handleImport}
+        onRequestImport={() => setUploadRequest({ kind: "import" })}
         importing={importing}
         onOpenTrash={handleOpenTrash}
         trashCount={trashCount}
@@ -1874,7 +1959,7 @@ export default function App() {
                 onUpdateLabel={handleUpdateRefLabel}
                 onUpdateKind={handleUpdateRefKind}
                 onGenerate={handleGenerateRefGraphic}
-                onUpload={handleUploadRefGraphic}
+                onRequestUpload={(id) => setUploadRequest({ kind: "ref", id })}
                 generatingIds={generatingRefIds}
                 disabled={!apiKey.trim()}
               />
@@ -1953,8 +2038,11 @@ export default function App() {
                       onPlanIllustration={(textModel) =>
                         handlePlanIllustration(activeSection.id, textModel)
                       }
-                      onUploadIllustration={(dataUrl) =>
-                        handleUploadIllustration(activeSection.id, dataUrl)
+                      onRequestUpload={() =>
+                        setUploadRequest({
+                          kind: "page",
+                          sectionId: activeSection.id,
+                        })
                       }
                       onTakeFromTrash={() =>
                         handleTakeFromTrash(activeSection.id)
@@ -2045,6 +2133,15 @@ export default function App() {
           onClose={handleCloseSettings}
           drive={drive}
           stories={storyList}
+        />
+      )}
+
+      {/* A file from outside: dropped, pasted, or picked */}
+      {uploadBoxProps && (
+        <UploadDropzone
+          {...uploadBoxProps}
+          onFiles={handleUploadFiles}
+          onClose={closeUpload}
         />
       )}
 

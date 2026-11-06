@@ -24,7 +24,7 @@ export default function Illustration({
   onCaptionChange,
   onGenerateIllustration,
   onPlanIllustration,
-  onUploadIllustration,
+  onRequestUpload,
   onTakeFromTrash,
   trashCount,
   onRemove,
@@ -35,16 +35,6 @@ export default function Illustration({
   const [textModel, setTextModel] = useState(TEXT_MODELS[0].id);
   const [imageModel, setImageModel] = useState(IMAGE_MODELS[0].id);
   const canGenerate = !generating && !planning && caption.trim().length > 0;
-
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    // Reset first, so picking the same file twice still fires a change event.
-    e.target.value = "";
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => onUploadIllustration(reader.result);
-    reader.readAsDataURL(file);
-  };
 
   return (
     <div className="card illustration-card">
@@ -127,15 +117,14 @@ export default function Illustration({
           the usual flow — the buttons above are — so they stay small and
           quiet underneath them. */}
       <div className="illustration-side-actions">
-        <label className="btn-tiny" title="Put a picture from this computer on this page">
+        <button
+          type="button"
+          className="btn-tiny"
+          onClick={onRequestUpload}
+          title="Put a picture on this page: drop it in, paste it, or pick it from this computer"
+        >
           📁 Upload illustration
-          <input
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={handleFileChange}
-          />
-        </label>
+        </button>
 
         <button
           type="button"

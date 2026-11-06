@@ -15,7 +15,7 @@ export default function ReferenceGraphics({
   onUpdateLabel,
   onUpdateKind,
   onGenerate,
-  onUpload,
+  onRequestUpload,
   generatingIds,
   disabled,
 }) {
@@ -36,14 +36,6 @@ export default function ReferenceGraphics({
       prompts[rg.id] !== undefined ? prompts[rg.id] : rg.prompt || "";
     const model = imageModels[rg.id] || IMAGE_MODELS[0].id;
     if (prompt.trim()) onGenerate(rg.id, rg.kind, prompt, model, rg.label);
-  };
-
-  const handleFileChange = (id, e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => onUpload(id, reader.result);
-    reader.readAsDataURL(file);
   };
 
   return (
@@ -105,15 +97,14 @@ export default function ReferenceGraphics({
                 {isExpanded ? "▲ Hide prompt" : "▼ Generate with prompt"}
               </button>
 
-              <label className="btn-small ref-upload-label">
+              <button
+                type="button"
+                className="btn-small"
+                onClick={() => onRequestUpload(rg.id)}
+                title="Drop a picture in, paste one, or pick one from this computer"
+              >
                 📁 Upload Image
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={(e) => handleFileChange(rg.id, e)}
-                />
-              </label>
+              </button>
             </div>
 
             {isExpanded && (

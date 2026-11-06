@@ -9,7 +9,7 @@ export default function Navbar({
   onDeleteStory,
   onLoadExample,
   loadingExample,
-  onImport,
+  onRequestImport,
   importing,
   onOpenTrash,
   trashCount,
@@ -18,13 +18,6 @@ export default function Navbar({
   driveRecords,
   unsavedStoryId,
 }) {
-  const handleImportChange = (e) => {
-    const files = Array.from(e.target.files ?? []);
-    // Reset first, so picking the same file twice still fires a change event.
-    e.target.value = "";
-    if (files.length) onImport(files);
-  };
-
   return (
     // The ref is how App measures the sticky bar: everything that scrolls
     // something into view has to know how much of the top it covers.
@@ -72,20 +65,15 @@ export default function Navbar({
           {loadingExample ? "Loading…" : "📋 Example"}
         </button>
 
-        <label
-          className="btn-small ref-upload-label"
-          title="Load story ZIPs previously downloaded from Export"
+        <button
+          type="button"
+          className="btn-small"
+          disabled={importing}
+          onClick={onRequestImport}
+          title="Load story ZIPs previously downloaded from Export — drop them in, paste them, or pick them"
         >
           {importing ? "Importing…" : "📥 Import"}
-          <input
-            type="file"
-            accept=".zip,application/zip"
-            multiple
-            disabled={importing}
-            style={{ display: "none" }}
-            onChange={handleImportChange}
-          />
-        </label>
+        </button>
 
         <button
           type="button"
