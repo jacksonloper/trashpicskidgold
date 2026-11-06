@@ -26,8 +26,19 @@ export function spokenText(section) {
     .trim();
 }
 
-/** The one key that reads the page: a bare P, nowhere near a text box. */
-function isReadKey(event) {
+/**
+ * Superspeed: how many times faster than spoken the page plays on O. The
+ * rate is applied at playback, so readings already in the cache speed up
+ * too. (The pitch climbs with it — that's part of the fun.)
+ */
+export const SUPERSPEED = 4;
+
+/**
+ * The keys that read the page, nowhere near a text box: a bare P reads it
+ * at the pace it was spoken, a bare O at superspeed. Returns the playback
+ * rate, or null for any other key.
+ */
+function readKeyRate(event) {
   const el = event.target;
   const typing =
     el &&
@@ -35,13 +46,10 @@ function isReadKey(event) {
       el.tagName === "INPUT" ||
       el.tagName === "TEXTAREA" ||
       el.tagName === "SELECT");
-  return (
-    (event.key === "p" || event.key === "P") &&
-    !event.ctrlKey &&
-    !event.metaKey &&
-    !event.altKey &&
-    !typing
-  );
+  if (event.ctrlKey || event.metaKey || event.altKey || typing) return null;
+  if (event.key === "p" || event.key === "P") return 1;
+  if (event.key === "o" || event.key === "O") return SUPERSPEED;
+  return null;
 }
 
 /* ---- Gemini's voice ---- */
@@ -67,13 +75,6 @@ let cacheEpoch = 0;
 
 let audioContext = null;
 let playing = null;
-
-/**
- * Superspeed: Gemini's readings play this many times faster than they were
- * spoken. The rate is applied at playback, so readings already in the cache
- * speed up too. (The pitch climbs with it — that's part of the fun.)
- */
-export const GEMINI_SPEED = 4;
 
 /**
  * Bumped by every P and every stop. A reading that arrives after its number
@@ -144,7 +145,8 @@ function geminiAvailable(apiKey) {
   return !!apiKey?.trim() && Date.now() >= geminiQuietUntil && !!wakeAudio();
 }
 
-function playReading({ pcm, sampleRate }) {
+/** Play a reading, `rate` times faster than it was spoken. */
+function playReading({ pcm, sampleRate }, rate) {
   const ctx = wakeAudio();
   const samples = new Int16Array(pcm, 0, Math.floor(pcm.byteLength / 2));
   const buffer = ctx.createBuffer(1, Math.max(samples.length, 1), sampleRate);
@@ -152,7 +154,7 @@ function playReading({ pcm, sampleRate }) {
   for (let i = 0; i < samples.length; i++) channel[i] = samples[i] / 32768;
   const source = ctx.createBufferSource();
   source.buffer = buffer;
-  source.playbackRate.value = GEMINI_SPEED;
+  source.playbackRate.value = rate;
   source.connect(ctx.destination);
   source.onended = () => {
     if (playing === source) playing = null;
@@ -161,18 +163,19 @@ function playReading({ pcm, sampleRate }) {
   source.start();
 }
 
-function speakWithBrowser(text) {
+function speakWithBrowser(text, rate = 1) {
   const synth = globalThis.speechSynthesis;
   if (!synth || typeof SpeechSynthesisUtterance === "undefined") return;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = document.documentElement.lang || "en";
+  utterance.rate = rate;
   synth.speak(utterance);
 }
 
 /**
  * Forget Gemini's readings of these pages, so the next P fetches them afresh.
  *
- * For when the voice, the direction or the speed has changed and a story's
+ * For when the voice or the direction has changed and a story's
  * pages still play the old way; or when a reading simply came out wrong.
  * Whatever is being said stops, since it may be one of them. Resolves with
  * how many readings were actually there to forget.
@@ -205,26 +208,26 @@ export function stopReading() {
 
 /**
  * Read `text` in Gemini's voice if its reading is already here, the
- * browser's if not.
+ * browser's if not, `rate` times faster than it was spoken.
  *
  * A keypress never waits on the network: a page whose reading hasn't
  * downloaded yet is read by the browser straight away, and its reading is
  * fetched meanwhile so the next P plays it.
  */
-function readAloud(text, apiKey) {
+function readAloud(text, apiKey, rate) {
   stopReading();
   const mine = generation;
   if (!geminiAvailable(apiKey)) {
-    speakWithBrowser(text);
+    speakWithBrowser(text, rate);
     return;
   }
   keptReading(text).then((reading) => {
     if (mine !== generation) return;
     if (reading) {
-      playReading(reading);
+      playReading(reading, rate);
       return;
     }
-    speakWithBrowser(text);
+    speakWithBrowser(text, rate);
     getReading(apiKey, text).catch((e) =>
       console.warn("Gemini couldn't read the page", e)
     );
@@ -232,7 +235,8 @@ function readAloud(text, apiKey) {
 }
 
 /**
- * Read the selected page aloud on P while the story list has the keyboard.
+ * Read the selected page aloud on P — or at superspeed on O — while the
+ * story list has the keyboard.
  *
  * The kid can't read yet; this is how the page reads itself to them. A page
  * with nothing written on it says so rather than staying silent, because
@@ -276,13 +280,14 @@ export default function useReadAloud(enabled, section, apiKey) {
     const handleKeyDown = (event) => {
       const listHasFocus =
         document.activeElement?.classList.contains("section-index-row");
-      if (!listHasFocus || !isReadKey(event)) return;
+      const rate = listHasFocus ? readKeyRate(event) : null;
+      if (rate === null) return;
       event.preventDefault();
       if (event.repeat) return;
 
       const words = spokenText(sectionRef.current);
       // A second P starts over from the top rather than talking over itself.
-      if (words) readAloud(words, apiKeyRef.current);
+      if (words) readAloud(words, apiKeyRef.current, rate);
       else {
         stopReading();
         speakWithBrowser("This page has no words yet.");

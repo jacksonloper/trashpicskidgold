@@ -56,7 +56,7 @@ export default function SectionIndex({
         (or <kbd>j</kbd>/<kbd>k</kbd>, <kbd>Home</kbd>/<kbd>End</kbd>) turn
         pages. <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> does the same while you
         are typing; hold either to go faster. <kbd>P</kbd> reads the page
-        aloud; turning the page stops it.
+        aloud, <kbd>O</kbd> reads it at superspeed; turning the page stops it.
       </p>
 
       {sections.length === 0 ? (
