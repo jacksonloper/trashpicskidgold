@@ -61,6 +61,13 @@ let audioContext = null;
 let playing = null;
 
 /**
+ * Superspeed: Gemini's readings play this many times faster than they were
+ * spoken. The rate is applied at playback, so readings already in the cache
+ * speed up too. (The pitch climbs with it — that's part of the fun.)
+ */
+export const GEMINI_SPEED = 4;
+
+/**
  * Bumped by every P and every stop. A reading that arrives after its number
  * has moved on is for a page no longer on screen, and stays quiet.
  */
@@ -133,6 +140,7 @@ function playReading({ pcm, sampleRate }) {
   for (let i = 0; i < samples.length; i++) channel[i] = samples[i] / 32768;
   const source = ctx.createBufferSource();
   source.buffer = buffer;
+  source.playbackRate.value = GEMINI_SPEED;
   source.connect(ctx.destination);
   source.onended = () => {
     if (playing === source) playing = null;
