@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { getSpeech, putSpeech } from "./db";
+import { deleteSpeech, getSpeech, putSpeech } from "./db";
 import { sha256Hex } from "./driveBackup/hashing";
 import { generateSpeech, SPEECH_DIRECTION, SPEECH_VOICE } from "./gemini";
 
@@ -57,6 +57,14 @@ let geminiQuietUntil = 0;
 /** Readings on their way, by cache key, so a page is never asked for twice. */
 const inFlight = new Map();
 
+/**
+ * Bumped whenever readings are forgotten. A fetch that began before the bump
+ * is for a cache the user has just emptied, so it plays nothing and keeps
+ * nothing; otherwise a reading in flight would land right back in the cache
+ * a moment after "forget" said it was gone.
+ */
+let cacheEpoch = 0;
+
 let audioContext = null;
 let playing = null;
 
@@ -109,16 +117,20 @@ function getReading(apiKey, text) {
     if (kept) return kept;
     const key = await speechKey(text);
     if (!inFlight.has(key)) {
+      const epoch = cacheEpoch;
       const fetching = generateSpeech(apiKey, text)
         .then(async ({ pcm, sampleRate }) => {
           const record = { key, pcm, sampleRate, usedAt: Date.now() };
+          if (epoch !== cacheEpoch) {
+            throw new Error("The readings were forgotten while this one was fetched.");
+          }
           await putSpeech(record).catch((e) =>
             console.warn("Couldn't keep the reading", e)
           );
           return record;
         })
         .catch((e) => {
-          geminiQuietUntil = Date.now() + COOL_OFF_MS;
+          if (epoch === cacheEpoch) geminiQuietUntil = Date.now() + COOL_OFF_MS;
           throw e;
         })
         .finally(() => inFlight.delete(key));
@@ -155,6 +167,26 @@ function speakWithBrowser(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = document.documentElement.lang || "en";
   synth.speak(utterance);
+}
+
+/**
+ * Forget Gemini's readings of these pages, so the next P fetches them afresh.
+ *
+ * For when the voice, the direction or the speed has changed and a story's
+ * pages still play the old way; or when a reading simply came out wrong.
+ * Whatever is being said stops, since it may be one of them. Resolves with
+ * how many readings were actually there to forget.
+ *
+ * @param {Array<object>} sections – the pages of one story
+ * @returns {Promise<number>}
+ */
+export async function forgetReadings(sections) {
+  stopReading();
+  cacheEpoch += 1;
+  inFlight.clear();
+  const texts = new Set(sections.map(spokenText).filter(Boolean));
+  const keys = await Promise.all([...texts].map(speechKey));
+  return deleteSpeech(keys);
 }
 
 /** Stop whatever is being said, by either voice. */

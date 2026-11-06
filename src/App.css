@@ -313,10 +313,17 @@
 
 /* ---- Export ---- */
 
-.export-section .export-row {
+.export-section .export-row,
+.read-aloud-section .export-row {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.read-aloud-status {
+  color: #666;
+  font-size: 0.9rem;
 }
 
 /* ---- Buttons ---- */
