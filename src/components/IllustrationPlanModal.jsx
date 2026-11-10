@@ -2,29 +2,29 @@ import { useState } from "react";
 import { IMAGE_MODELS } from "../gemini";
 
 /**
- * Modal shown after the AI plans an illustration.
+ * Modal shown after the AI plans a picture — a page's illustration, or one of
+ * the reference pictures the pages are drawn from.
  * Lets the user review/edit the prompt and toggle reference images
  * before approving generation.
  *
  * Props:
- *   plan          – { prompt, referenceImageIds }
- *   sectionLabel  – which page the plan is for; the plan can arrive after the
- *                   user has moved on to a different section
+ *   plan          – { prompt, referenceImageIds, imageModel? }
+ *   title         – what is being reviewed, e.g. "Review Illustration Plan"
+ *   targetLabel   – which page or reference the plan is for; the plan can
+ *                   arrive after the user has moved on to a different section
  *   notice        – optional warning to show above the prompt (damaged reply,
  *                   failed generation) so the user knows why they are here
- *   allImages     – { imageId: dataUrl } map of all loaded images
- *   referenceGraphics – array of {id, label, imageId}
- *   sections      – story sections (for illustration images)
+ *   candidates    – [{ imageId, label, url }] every picture the generator may
+ *                   be shown; the caller decides what belongs on the list
  *   onApprove(plan) – called with final { prompt, referenceImageIds, imageModel }
  *   onCancel()
  */
 export default function IllustrationPlanModal({
   plan,
+  title = "Review Illustration Plan",
   notice,
-  allImages,
-  sectionLabel,
-  referenceGraphics,
-  sections,
+  targetLabel,
+  candidates,
   onApprove,
   onCancel,
 }) {
@@ -36,29 +36,6 @@ export default function IllustrationPlanModal({
   const [imageModel, setImageModel] = useState(
     plan.imageModel || IMAGE_MODELS[0].id
   );
-
-  // Build a list of all candidate images (ref graphics + existing illustrations)
-  const candidates = [];
-
-  for (const rg of referenceGraphics) {
-    if (rg.imageId && allImages[rg.imageId]) {
-      candidates.push({
-        imageId: rg.imageId,
-        label: `Ref: ${rg.label || "(unlabeled)"}`,
-        url: allImages[rg.imageId],
-      });
-    }
-  }
-
-  for (const sec of sections) {
-    if (sec.type === "illustration" && sec.imageId && allImages[sec.imageId]) {
-      candidates.push({
-        imageId: sec.imageId,
-        label: `Illustration: ${sec.caption || "(no caption)"}`,
-        url: allImages[sec.imageId],
-      });
-    }
-  }
 
   const toggle = (imageId) => {
     setSelectedIds((prev) => {
@@ -77,9 +54,9 @@ export default function IllustrationPlanModal({
     <div className="plan-modal-overlay" onClick={onCancel}>
       <div className="plan-modal" onClick={(e) => e.stopPropagation()}>
         <h3>
-          Review Illustration Plan
-          {sectionLabel && (
-            <span className="plan-modal-target"> — {sectionLabel}</span>
+          {title}
+          {targetLabel && (
+            <span className="plan-modal-target"> — {targetLabel}</span>
           )}
         </h3>
 

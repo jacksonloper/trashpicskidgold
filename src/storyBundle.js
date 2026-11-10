@@ -272,7 +272,7 @@ function captionsById(story) {
   const out = {};
   const blob = story.jsonblob ?? {};
   for (const rg of blob.referenceGraphics ?? []) {
-    if (rg.imageId) out[rg.imageId] = rg.label ?? "";
+    if (rg.imageId) out[rg.imageId] = rg.label || rg.caption || "";
   }
   for (const sec of blob.sections ?? []) {
     if (sec.type === "illustration" && sec.imageId) {
@@ -292,7 +292,7 @@ function captionsById(story) {
  *   and all internal references are rewritten, so importing a bundle twice
  *   can never clobber the first copy.
  * - References to images the bundle does not carry are dropped, leaving the
- *   caption and prompt in place so the panel can simply be regenerated.
+ *   caption in place so the panel can simply be regenerated.
  *
  * Returns { story, images, remapped, droppedImageRefs }.
  */

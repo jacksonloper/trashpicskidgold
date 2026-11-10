@@ -135,6 +135,9 @@ export async function loadExampleStory() {
           label: CHARACTERS.map((c) => c.name).join(", ") + " – Character Sheet",
           kind: "character",
           imageId: charSheetImgId,
+          caption: CHARACTERS.map((c) => `${c.name}: ${c.description}`).join(
+            ". "
+          ),
         },
       ],
       sections: builtSections,

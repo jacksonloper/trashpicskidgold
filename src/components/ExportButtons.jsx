@@ -24,13 +24,16 @@ function buildMarkdown(story, imageFiles) {
   const blob = story.jsonblob;
   const lines = [`# ${story.title}`, ""];
 
-  // Reference graphics
+  // Meet the characters: each reference picture with its caption under it
   for (const rg of blob.referenceGraphics ?? []) {
     if (rg.imageId && imageFiles[rg.imageId]) {
       lines.push(
         `![${rg.label || "Reference graphic"}](images/${imageFiles[rg.imageId]})`,
         ""
       );
+    }
+    if (rg.caption) {
+      lines.push(`*${rg.label ? `${rg.label}: ` : ""}${rg.caption}*`, "");
     }
   }
 
@@ -77,10 +80,13 @@ async function exportToHtml(story) {
 
   let body = `<h1>${escHtml(story.title)}</h1>\n`;
 
-  // Reference graphics
+  // Meet the characters: each reference picture with its caption under it
   for (const rg of blob.referenceGraphics ?? []) {
     if (rg.imageId && imageMap[rg.imageId]) {
       body += `<div class="img-wrap"><img src="${imageMap[rg.imageId].data}" alt="${escHtml(rg.label || "Reference graphic")}"></div>\n`;
+    }
+    if (rg.caption) {
+      body += `<p class="caption"><em>${escHtml(rg.label ? `${rg.label}: ${rg.caption}` : rg.caption)}</em></p>\n`;
     }
   }
 

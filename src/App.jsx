@@ -20,9 +20,8 @@ import UploadDropzone from "./components/UploadDropzone";
 import { loadSettings, saveSettings } from "./settingsStore";
 import useDriveBackup from "./driveBackup/useDriveBackup";
 import {
-  buildRefGraphicPrompt,
   planIllustration,
-  generateImage,
+  planReferenceGraphic,
   generateImageWithReferences,
 } from "./gemini";
 import {
@@ -65,6 +64,11 @@ function sectionTitle(sec, index) {
   return sec.type === "illustration"
     ? `Page ${index + 1}`
     : `Text Block ${index + 1}`;
+}
+
+/** How a reference picture is named in dialogs, when it has no name yet. */
+function refGraphicTitle(rg) {
+  return rg.label?.trim() || "Unnamed reference";
 }
 
 /** Warning shown above a plan the model didn't deliver cleanly. */
@@ -257,9 +261,12 @@ export default function App() {
   const [story, setStory] = useState(null); // full story record or null
   const [allImages, setAllImages] = useState({}); // imageId → dataUrl
   const [generatingRefIds, setGeneratingRefIds] = useState({});
+  const [planningRefIds, setPlanningRefIds] = useState({});
   const [generatingSections, setGeneratingSections] = useState({});
   const [planningSections, setPlanningSections] = useState({});
-  const [illustrationPlan, setIllustrationPlan] = useState(null); // { sectionId, prompt, referenceImageIds }
+  // A plan under review: { sectionId } or { rgId }, plus prompt,
+  // referenceImageIds, and the notice to show above it.
+  const [illustrationPlan, setIllustrationPlan] = useState(null);
   const [error, setError] = useState(null); // { message, details } | null
   const [errorDetailsOpen, setErrorDetailsOpen] = useState(false);
 
@@ -295,7 +302,8 @@ export default function App() {
   const [trashLoading, setTrashLoading] = useState(false);
   const [trashCount, setTrashCount] = useState(0); // badge on the navbar
   const [trashBusyId, setTrashBusyId] = useState(null); // one item mid-action
-  const [trashPickSectionId, setTrashPickSectionId] = useState(null); // picker
+  // The trash as a picker: { sectionId } or { rgId } wanting a picture.
+  const [trashPick, setTrashPick] = useState(null);
   const [ageAgreed, setAgeAgreed] = useState(() => hasRecentAgreement());
   const [revealRequest, setRevealRequest] = useState(null); // { id } to show
   // A story the browser refused to save: { id, title, message, since }.
@@ -590,15 +598,18 @@ export default function App() {
 
   /** The navbar bin: everything in the trash, with the ways to clear it. */
   const handleOpenTrash = useCallback(() => {
-    setTrashPickSectionId(null);
+    setTrashPick(null);
     setTrashOpen(true);
     loadTrash();
   }, [loadTrash]);
 
-  /** The same window as a picker, opened by a page wanting a picture. */
+  /**
+   * The same window as a picker, opened by a page or a reference picture
+   * wanting a picture: `target` is { sectionId } or { rgId }.
+   */
   const handleTakeFromTrash = useCallback(
-    (sectionId) => {
-      setTrashPickSectionId(sectionId);
+    (target) => {
+      setTrashPick(target);
       setTrashOpen(true);
       loadTrash();
     },
@@ -607,7 +618,7 @@ export default function App() {
 
   const handleCloseTrash = useCallback(() => {
     setTrashOpen(false);
-    setTrashPickSectionId(null);
+    setTrashPick(null);
   }, []);
 
   /* ---- story CRUD ---- */
@@ -811,7 +822,7 @@ export default function App() {
         ...s.jsonblob,
         referenceGraphics: [
           ...s.jsonblob.referenceGraphics,
-          { id, label: "", kind: "character", imageId: null, prompt: "" },
+          { id, label: "", kind: "character", imageId: null, caption: "" },
         ],
       },
     }));
@@ -863,32 +874,37 @@ export default function App() {
     [referenceGraphics, removeRefGraphicNow]
   );
 
-  const handleUpdateRefLabel = useCallback(
-    (rgId, label) =>
+  /** Change some fields of one reference graphic, through the autosave. */
+  const updateRefGraphic = useCallback(
+    (rgId, patch) =>
       updateStory((s) => ({
         ...s,
         jsonblob: {
           ...s.jsonblob,
           referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
-            rg.id === rgId ? { ...rg, label } : rg
+            rg.id === rgId ? { ...rg, ...patch } : rg
           ),
         },
       })),
     [updateStory]
   );
 
+  const handleUpdateRefLabel = useCallback(
+    (rgId, label) => updateRefGraphic(rgId, { label }),
+    [updateRefGraphic]
+  );
+
   const handleUpdateRefKind = useCallback(
-    (rgId, kind) =>
-      updateStory((s) => ({
-        ...s,
-        jsonblob: {
-          ...s.jsonblob,
-          referenceGraphics: s.jsonblob.referenceGraphics.map((rg) =>
-            rg.id === rgId ? { ...rg, kind } : rg
-          ),
-        },
-      })),
-    [updateStory]
+    (rgId, kind) => updateRefGraphic(rgId, { kind }),
+    [updateRefGraphic]
+  );
+
+  // Saved as it is typed, like a page's caption: it is the words the picture
+  // is planned from, and they are the grown-up's to keep whether or not a
+  // picture is ever generated from them.
+  const handleUpdateRefCaption = useCallback(
+    (rgId, caption) => updateRefGraphic(rgId, { caption }),
+    [updateRefGraphic]
   );
 
   /* ---- putting a finished picture where it belongs ---- */
@@ -911,7 +927,7 @@ export default function App() {
    * to the trash only after the new reference is on disk, so a crash in
    * between can never leave a page pointing at the trash.
    *
-   * `where` is { sectionId } or { rgId, prompt }. Returns
+   * `where` is { sectionId } or { rgId }. Returns
    *   { placed: true, replaced, title }   the picture is on its page
    *   { placed: false, title }            the page or reference is gone
    *   { placed: false, gone: true }       the whole story is gone
@@ -947,13 +963,7 @@ export default function App() {
             jsonblob: {
               ...blob,
               referenceGraphics: blob.referenceGraphics.map((x) =>
-                x.id === where.rgId
-                  ? {
-                      ...x,
-                      imageId: imgId,
-                      ...(where.prompt !== undefined ? { prompt: where.prompt } : {}),
-                    }
-                  : x
+                x.id === where.rgId ? { ...x, imageId: imgId } : x
               ),
             },
           },
@@ -1008,39 +1018,6 @@ export default function App() {
     [trashPicture]
   );
 
-  const handleGenerateRefGraphic = useCallback(
-    async (rgId, kind, userPrompt, imageModel, label) => {
-      if (!story) return;
-      setError(null);
-      // The story that asked, held by id: the grown-up may be elsewhere by
-      // the time the picture comes back.
-      const owner = { id: story.id, title: story.title };
-      setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
-      try {
-        const prompt = buildRefGraphicPrompt(style, kind, userPrompt, label);
-        const dataUrl = await generateImage(apiKey, prompt, imageModel);
-        const imgId = newImageId();
-        await saveImage({
-          id: imgId,
-          storyId: owner.id,
-          caption: userPrompt.slice(0, 120),
-          data: dataUrl,
-        });
-        setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
-        const result = await placePicture(owner.id, imgId, {
-          rgId,
-          prompt: userPrompt,
-        });
-        await settlePicture(result, imgId, owner.title);
-      } catch (err) {
-        setError(asSnack(err));
-      } finally {
-        setGeneratingRefIds((prev) => ({ ...prev, [rgId]: false }));
-      }
-    },
-    [apiKey, placePicture, settlePicture, style, story]
-  );
-
   const handleUploadRefGraphic = useCallback(
     async (rgId, dataUrl) => {
       if (!story) return;
@@ -1048,10 +1025,11 @@ export default function App() {
       const owner = { id: story.id, title: story.title };
       try {
         const imgId = newImageId();
+        const rg = referenceGraphics.find((x) => x.id === rgId);
         await saveImage({
           id: imgId,
           storyId: owner.id,
-          caption: "Uploaded reference",
+          caption: rg?.caption || rg?.label || "Uploaded reference",
           data: dataUrl,
         });
         setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
@@ -1061,7 +1039,7 @@ export default function App() {
         setError(asSnack(err));
       }
     },
-    [placePicture, settlePicture, story]
+    [placePicture, referenceGraphics, settlePicture, story]
   );
 
   /* ---- keeping the open section in view ---- */
@@ -1405,9 +1383,10 @@ export default function App() {
   const makingArt = useMemo(
     () =>
       Object.values(generatingRefIds).some(Boolean) ||
+      Object.values(planningRefIds).some(Boolean) ||
       Object.values(generatingSections).some(Boolean) ||
       Object.values(planningSections).some(Boolean),
-    [generatingRefIds, generatingSections, planningSections]
+    [generatingRefIds, generatingSections, planningRefIds, planningSections]
   );
 
   /*
@@ -1469,7 +1448,8 @@ export default function App() {
   /* ---- acting on what is in the trash ---- */
 
   /**
-   * Put a picture from the trash onto the page that asked for it.
+   * Put a picture from the trash onto the page, or the reference picture,
+   * that asked for it.
    *
    * It may have come from another story, so the record is re-stamped on the
    * way out: the images store is indexed by story, and a picture still
@@ -1477,29 +1457,37 @@ export default function App() {
    */
   const handleUseTrashedPicture = useCallback(
     async (entry) => {
-      const sectionId = trashPickSectionId;
-      const sec = sections.find((x) => x.id === sectionId);
-      if (!sec || !story) return;
+      const target = trashPick;
+      if (!target || !story) return;
+      const sec = target.sectionId
+        ? sections.find((x) => x.id === target.sectionId)
+        : null;
+      const rg = target.rgId
+        ? referenceGraphics.find((x) => x.id === target.rgId)
+        : null;
+      const slot = sec ?? rg;
+      if (!slot) return;
       setTrashBusyId(entry.id);
       setError(null);
       try {
         await flushSave();
-        const replaced = sec.imageId;
+        const replaced = slot.imageId;
         const picture = await untrashImage(entry.id, {
           storyId: story.id,
-          caption: sec.caption || entry.caption || "",
+          caption: slot.caption || slot.label || entry.caption || "",
         });
         if (!picture) {
           setError(asSnack("That picture is no longer in the trash."));
           return;
         }
         setAllImages((prev) => ({ ...prev, [picture.id]: picture.data }));
-        updateSectionField(sectionId, "imageId", picture.id);
+        if (sec) updateSectionField(sec.id, "imageId", picture.id);
+        else updateRefGraphic(rg.id, { imageId: picture.id });
         // A straight swap: what was on the page takes the picture's place.
         await trashPicture(replaced, "replaced", story.title);
         setTrashOpen(false);
-        setTrashPickSectionId(null);
-        requestReveal(sectionId);
+        setTrashPick(null);
+        if (sec) requestReveal(sec.id);
       } catch (err) {
         setError(asSnack(err, "Could not take that picture out of the trash: "));
       } finally {
@@ -1510,11 +1498,13 @@ export default function App() {
     [
       flushSave,
       loadTrash,
+      referenceGraphics,
       requestReveal,
       sections,
       story,
+      trashPick,
       trashPicture,
-      trashPickSectionId,
+      updateRefGraphic,
       updateSectionField,
     ]
   );
@@ -1697,6 +1687,26 @@ export default function App() {
   );
 
   /**
+   * The pictures a plan wants the generator shown, as the API takes them.
+   * One may be an illustration from a page this session never opened.
+   */
+  const collectReferenceImages = useCallback(
+    async (imageIds) => {
+      const refImgs = [];
+      for (const imgId of imageIds) {
+        const dataUrl = allImages[imgId] ?? (await getImage(imgId))?.data;
+        if (dataUrl) {
+          const base64 = dataUrl.split(",")[1];
+          const mimeType = dataUrl.split(";")[0].split(":")[1];
+          refImgs.push({ base64, mimeType });
+        }
+      }
+      return refImgs;
+    },
+    [allImages]
+  );
+
+  /**
    * Generate + persist the image for a section from a finished plan.
    * Returns { ok, error } so a caller holding the plan can decide what to do
    * with it rather than having to watch the error banner.
@@ -1713,18 +1723,7 @@ export default function App() {
       setGeneratingSections((prev) => ({ ...prev, [sectionId]: true }));
 
       try {
-        // Collect reference images from the plan
-        const refImgs = [];
-        for (const imgId of plan.referenceImageIds) {
-          // May name an illustration from a page this session never opened.
-          const dataUrl = allImages[imgId] ?? (await getImage(imgId))?.data;
-          if (dataUrl) {
-            const base64 = dataUrl.split(",")[1];
-            const mimeType = dataUrl.split(";")[0].split(":")[1];
-            refImgs.push({ base64, mimeType });
-          }
-        }
-
+        const refImgs = await collectReferenceImages(plan.referenceImageIds);
         const dataUrl = await generateImageWithReferences(
           apiKey,
           plan.prompt,
@@ -1757,7 +1756,15 @@ export default function App() {
         setGeneratingSections((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [apiKey, allImages, flushSave, placePicture, sections, settlePicture, story]
+    [
+      apiKey,
+      collectReferenceImages,
+      flushSave,
+      placePicture,
+      sections,
+      settlePicture,
+      story,
+    ]
   );
 
   /** Plan only, then open the review modal. */
@@ -1798,18 +1805,135 @@ export default function App() {
     [runGenerate, runPlan, story]
   );
 
+  /* ---- reference picture plan → generate ----
+   *
+   * The same two steps as a page, aimed at one of the meet-the-characters
+   * pictures: the planner writes the prompt from the caption and picks which
+   * of the other reference pictures the generator should see, then the
+   * picture is drawn with them attached.
+   */
+
+  const runRefPlan = useCallback(
+    async (rgId, textModel) => {
+      const rg = referenceGraphics.find((x) => x.id === rgId);
+      if (!rg) return null;
+      // Like a page: the caption typed a moment ago is on disk before the
+      // model, which can fail, is asked anything about it.
+      await flushSave();
+      setError(null);
+      setPlanningRefIds((prev) => ({ ...prev, [rgId]: true }));
+      try {
+        return await planReferenceGraphic(
+          apiKey,
+          style,
+          referenceGraphics,
+          rg,
+          sections,
+          allImages,
+          textModel
+        );
+      } catch (err) {
+        setError(asSnack(err));
+        return null;
+      } finally {
+        setPlanningRefIds((prev) => ({ ...prev, [rgId]: false }));
+      }
+    },
+    [apiKey, allImages, flushSave, referenceGraphics, sections, style]
+  );
+
+  const runRefGenerate = useCallback(
+    async (rgId, plan) => {
+      if (!story) return { ok: false, error: null };
+      await flushSave();
+      setError(null);
+      const owner = { id: story.id, title: story.title };
+      setGeneratingRefIds((prev) => ({ ...prev, [rgId]: true }));
+      try {
+        const refImgs = await collectReferenceImages(plan.referenceImageIds);
+        const dataUrl = await generateImageWithReferences(
+          apiKey,
+          plan.prompt,
+          refImgs,
+          plan.imageModel
+        );
+        const imgId = newImageId();
+        const rg = referenceGraphics.find((x) => x.id === rgId);
+        await saveImage({
+          id: imgId,
+          storyId: owner.id,
+          caption: rg?.caption || rg?.label || "",
+          data: dataUrl,
+        });
+        setAllImages((prev) => ({ ...prev, [imgId]: dataUrl }));
+        const result = await placePicture(owner.id, imgId, { rgId });
+        await settlePicture(result, imgId, owner.title);
+        return { ok: true, error: null };
+      } catch (err) {
+        setError(asSnack(err));
+        return { ok: false, error: err.message };
+      } finally {
+        setGeneratingRefIds((prev) => ({ ...prev, [rgId]: false }));
+      }
+    },
+    [
+      apiKey,
+      collectReferenceImages,
+      flushSave,
+      placePicture,
+      referenceGraphics,
+      settlePicture,
+      story,
+    ]
+  );
+
+  /** Plan a reference picture only, then open the review modal. */
+  const handlePlanRefGraphic = useCallback(
+    async (rgId, textModel) => {
+      if (!story) return;
+      const plan = await runRefPlan(rgId, textModel);
+      if (plan) {
+        setIllustrationPlan({ rgId, ...plan, notice: planNotice(plan) });
+      }
+    },
+    [runRefPlan, story]
+  );
+
+  /** Plan and draw a reference picture in one go, as a page's button does. */
+  const handleGenerateRefGraphic = useCallback(
+    async (rgId, textModel, imageModel) => {
+      if (!story) return;
+      const plan = await runRefPlan(rgId, textModel);
+      if (!plan) return;
+      if (plan.partial) {
+        setIllustrationPlan({
+          rgId,
+          ...plan,
+          imageModel,
+          notice: planNotice(plan),
+        });
+        return;
+      }
+      await runRefGenerate(rgId, { ...plan, imageModel });
+    },
+    [runRefGenerate, runRefPlan, story]
+  );
+
   /**
    * The modal closes as generation starts, but a failed generation would
    * otherwise take the reviewed prompt with it — so put it back on failure.
+   * The plan says which kind of picture it is for.
    */
-  const handleApproveIllustration = useCallback(
+  const handleApprovePlan = useCallback(
     async (approvedPlan) => {
-      const { sectionId } = illustrationPlan;
+      const { sectionId, rgId } = illustrationPlan;
       setIllustrationPlan(null);
-      const { ok, error: failure } = await runGenerate(sectionId, approvedPlan);
+      const { ok, error: failure } = rgId
+        ? await runRefGenerate(rgId, approvedPlan)
+        : await runGenerate(sectionId, approvedPlan);
       if (!ok) {
         setIllustrationPlan({
-          sectionId,
+          ...(rgId ? { rgId } : { sectionId }),
           ...approvedPlan,
           notice:
             (failure ? `That generation failed — ${failure} ` : "") +
@@ -1818,7 +1942,7 @@ export default function App() {
         });
       }
     },
-    [illustrationPlan, runGenerate]
+    [illustrationPlan, runGenerate, runRefGenerate]
   );
 
   const handleCancelPlan = useCallback(() => setIllustrationPlan(null), []);
@@ -1829,20 +1953,65 @@ export default function App() {
    * Planning takes seconds, and with one section on screen at a time the
    * modal can easily open over a different page than the one it is for.
    */
-  /** The page the trash picker was opened from, named the way its card is. */
+  /**
+   * The page or reference picture the trash picker was opened from, named
+   * the way its card is.
+   */
   const trashPickLabel = useMemo(() => {
-    if (!trashPickSectionId) return null;
-    const idx = sections.findIndex((sec) => sec.id === trashPickSectionId);
+    if (!trashPick) return null;
+    if (trashPick.rgId) {
+      const rg = referenceGraphics.find((x) => x.id === trashPick.rgId);
+      return rg ? refGraphicTitle(rg) : null;
+    }
+    const idx = sections.findIndex((sec) => sec.id === trashPick.sectionId);
     return idx === -1 ? null : sectionTitle(sections[idx], idx);
-  }, [sections, trashPickSectionId]);
+  }, [referenceGraphics, sections, trashPick]);
 
-  const planSectionLabel = useMemo(() => {
+  const planTargetLabel = useMemo(() => {
     if (!illustrationPlan) return null;
+    if (illustrationPlan.rgId) {
+      const rg = referenceGraphics.find((x) => x.id === illustrationPlan.rgId);
+      return rg ? refGraphicTitle(rg) : null;
+    }
     const idx = sections.findIndex(
       (sec) => sec.id === illustrationPlan.sectionId
     );
     return idx === -1 ? null : sectionTitle(sections[idx], idx);
-  }, [illustrationPlan, sections]);
+  }, [illustrationPlan, referenceGraphics, sections]);
+
+  /**
+   * What the review modal offers as reference pictures.
+   *
+   * A page may be drawn from any reference picture and any earlier page. A
+   * reference picture is drawn from the other reference pictures only — not
+   * from pages, which are drawn from it, and not from its own current
+   * picture, which asking again means is not right.
+   */
+  const planCandidates = useMemo(() => {
+    if (!illustrationPlan) return [];
+    const out = [];
+    for (const rg of referenceGraphics) {
+      if (rg.id === illustrationPlan.rgId) continue;
+      if (rg.imageId && allImages[rg.imageId]) {
+        out.push({
+          imageId: rg.imageId,
+          label: `Ref: ${rg.label || "(unlabeled)"}`,
+          url: allImages[rg.imageId],
+        });
+      }
+    }
+    if (illustrationPlan.rgId) return out;
+    for (const sec of sections) {
+      if (sec.type === "illustration" && sec.imageId && allImages[sec.imageId]) {
+        out.push({
+          imageId: sec.imageId,
+          label: `Illustration: ${sec.caption || "(no caption)"}`,
+          url: allImages[sec.imageId],
+        });
+      }
+    }
+    return out;
+  }, [allImages, illustrationPlan, referenceGraphics, sections]);
 
   /* ---- render ---- */
 
@@ -1950,7 +2119,7 @@ export default function App() {
                 onStyleChange={handleStyleChange}
               />
 
-              {/* Reference Graphics */}
+              {/* Meet the characters: the reference pictures */}
               <ReferenceGraphics
                 referenceGraphics={referenceGraphics}
                 refImages={allImages}
@@ -1958,9 +2127,14 @@ export default function App() {
                 onRemove={handleRemoveRefGraphic}
                 onUpdateLabel={handleUpdateRefLabel}
                 onUpdateKind={handleUpdateRefKind}
+                onUpdateCaption={handleUpdateRefCaption}
                 onGenerate={handleGenerateRefGraphic}
+                onPlan={handlePlanRefGraphic}
                 onRequestUpload={(id) => setUploadRequest({ kind: "ref", id })}
+                onTakeFromTrash={(id) => handleTakeFromTrash({ rgId: id })}
+                trashCount={trashCount}
                 generatingIds={generatingRefIds}
+                planningIds={planningRefIds}
                 disabled={!apiKey.trim()}
               />
 
@@ -2045,7 +2219,7 @@ export default function App() {
                         })
                       }
                       onTakeFromTrash={() =>
-                        handleTakeFromTrash(activeSection.id)
+                        handleTakeFromTrash({ sectionId: activeSection.id })
                       }
                       trashCount={trashCount}
                       onImageShown={() => handleImageShown(activeSection.id)}
@@ -2153,16 +2327,19 @@ export default function App() {
         />
       )}
 
-      {/* Illustration plan approval modal */}
+      {/* Plan approval modal, for a page or a reference picture */}
       {illustrationPlan && (
         <IllustrationPlanModal
           plan={illustrationPlan}
-          sectionLabel={planSectionLabel}
+          title={
+            illustrationPlan.rgId
+              ? "Review Reference Plan"
+              : "Review Illustration Plan"
+          }
+          targetLabel={planTargetLabel}
           notice={illustrationPlan.notice}
-          allImages={allImages}
-          referenceGraphics={referenceGraphics}
-          sections={sections}
-          onApprove={handleApproveIllustration}
+          candidates={planCandidates}
+          onApprove={handleApprovePlan}
           onCancel={handleCancelPlan}
         />
       )}
