@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSpeech, putSpeech } from "./db";
 import { sha256Hex } from "./driveBackup/hashing";
-import { generateSpeech, SPEECH_DIRECTION, SPEECH_VOICE } from "./gemini";
+import { generateSpeech } from "./gemini";
+import { DEFAULT_VOICE_ACTING } from "./voiceActingStore";
 
 /**
  * What a page says out loud: its caption, or the words of a text block.
@@ -79,16 +80,37 @@ function wakeAudio() {
   return audioContext;
 }
 
-/** The cache key: the words, and everything that decides how they sound. */
-function speechKey(text) {
-  return sha256Hex(`${SPEECH_VOICE}\n${SPEECH_DIRECTION}\n${text}`);
+/** Told whenever a reading is kept, so a "make the voice" button can relabel. */
+const keptListeners = new Set();
+
+function announceKept(key) {
+  for (const listener of keptListeners) listener(key);
+}
+
+/**
+ * The cache key: the words, and everything that decides how they sound —
+ * the voice and its direction. Changing either is a different reading.
+ */
+function speechKey(text, acting = DEFAULT_VOICE_ACTING) {
+  return sha256Hex(`${acting.voice}\n${acting.direction}\n${text}`);
 }
 
 /** The reading of `text` already on this computer, or null. */
-async function keptReading(text) {
-  const kept = await getSpeech(await speechKey(text)).catch(() => null);
+async function keptReading(text, acting) {
+  const kept = await getSpeech(await speechKey(text, acting)).catch(() => null);
   if (kept) putSpeech({ ...kept, usedAt: Date.now() }).catch(() => {});
   return kept;
+}
+
+/** Fetch a reading from Gemini and keep it, replacing any kept already. */
+async function fetchAndKeep(apiKey, text, acting, key) {
+  const { pcm, sampleRate } = await generateSpeech(apiKey, text, acting);
+  const record = { key, pcm, sampleRate, usedAt: Date.now() };
+  await putSpeech(record).catch((e) =>
+    console.warn("Couldn't keep the reading", e)
+  );
+  announceKept(key);
+  return record;
 }
 
 /**
@@ -96,20 +118,13 @@ async function keptReading(text) {
  * otherwise fetched and kept. The cache stays on this computer — it is not
  * backed up or exported, since any of it can be made again.
  */
-function getReading(apiKey, text) {
+function getReading(apiKey, text, acting) {
   return (async () => {
-    const kept = await keptReading(text);
+    const kept = await keptReading(text, acting);
     if (kept) return kept;
-    const key = await speechKey(text);
+    const key = await speechKey(text, acting);
     if (!inFlight.has(key)) {
-      const fetching = generateSpeech(apiKey, text)
-        .then(async ({ pcm, sampleRate }) => {
-          const record = { key, pcm, sampleRate, usedAt: Date.now() };
-          await putSpeech(record).catch((e) =>
-            console.warn("Couldn't keep the reading", e)
-          );
-          return record;
-        })
+      const fetching = fetchAndKeep(apiKey, text, acting, key)
         .catch((e) => {
           geminiQuietUntil = Date.now() + COOL_OFF_MS;
           throw e;
@@ -171,24 +186,77 @@ export function stopReading() {
  * downloaded yet is read by the browser straight away, and its reading is
  * fetched meanwhile so the next P plays it.
  */
-function readAloud(text, apiKey) {
+function readAloud(text, apiKey, acting) {
   stopReading();
   const mine = generation;
   if (!geminiAvailable(apiKey)) {
     speakWithBrowser(text);
     return;
   }
-  keptReading(text).then((reading) => {
+  keptReading(text, acting).then((reading) => {
     if (mine !== generation) return;
     if (reading) {
       playReading(reading);
       return;
     }
     speakWithBrowser(text);
-    getReading(apiKey, text).catch((e) =>
+    getReading(apiKey, text, acting).catch((e) =>
       console.warn("Gemini couldn't read the page", e)
     );
   });
+}
+
+/**
+ * Have Gemini voice-act a page afresh, keep it in place of whatever reading
+ * it had, and play it. For when a take came out wrong, or the direction has
+ * been rewritten and the page should be heard with it now.
+ *
+ * The keypress that asked for it wakes the audio, so it can play when the
+ * reading lands seconds later — unless the page has been turned by then.
+ */
+export async function remakeReading(apiKey, section, acting) {
+  const text = spokenText(section);
+  if (!text) throw new Error("This page has no words to read.");
+  wakeAudio();
+  stopReading();
+  const mine = generation;
+  const key = await speechKey(text, acting);
+  const reading = await fetchAndKeep(apiKey, text, acting, key);
+  geminiQuietUntil = 0;
+  if (mine === generation) playReading(reading);
+}
+
+/**
+ * Whether `section` has a reading kept for `acting`: null while finding out.
+ * Turns true the moment one is kept, whoever fetched it.
+ */
+export function useHasReading(section, acting) {
+  const text = spokenText(section);
+  const [state, setState] = useState({ for: null, has: false });
+  const ask = `${acting.voice}\n${acting.direction}\n${text}`;
+  useEffect(() => {
+    if (!text) return undefined;
+    let live = true;
+    let key = null;
+    speechKey(text, acting).then((k) => {
+      key = k;
+      return getSpeech(k)
+        .catch(() => null)
+        .then((kept) => live && setState({ for: ask, has: !!kept }));
+    });
+    const onKept = (k) => {
+      if (live && k === key) setState({ for: ask, has: true });
+    };
+    keptListeners.add(onKept);
+    return () => {
+      live = false;
+      keptListeners.delete(onKept);
+    };
+    // `ask` stands for text and acting together.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask]);
+  if (!text) return false;
+  return state.for === ask ? state.has : null;
 }
 
 /**
@@ -205,12 +273,19 @@ function readAloud(text, apiKey) {
  * Turning the page cuts the speech short — a caption still being read over a
  * different picture would be confusing — as does leaving the story.
  */
-export default function useReadAloud(enabled, section, apiKey) {
+export default function useReadAloud(
+  enabled,
+  section,
+  apiKey,
+  acting = DEFAULT_VOICE_ACTING
+) {
   const sectionRef = useRef(section);
   const apiKeyRef = useRef(apiKey);
+  const actingRef = useRef(acting);
   useEffect(() => {
     sectionRef.current = section;
     apiKeyRef.current = apiKey;
+    actingRef.current = acting;
   });
 
   // The page under the voice has changed: whatever it was saying is about the
@@ -220,15 +295,17 @@ export default function useReadAloud(enabled, section, apiKey) {
 
   // Fetch the reading of a page that has settled on screen, so P needn't wait.
   // Holding an arrow down flies past pages without asking for any of them.
+  // A direction being typed waits for the typing to stop in the same way.
   const text = spokenText(section);
+  const { voice, direction } = acting;
   useEffect(() => {
     if (!enabled || !text || !apiKey?.trim()) return undefined;
     const timer = setTimeout(() => {
       if (Date.now() < geminiQuietUntil) return;
-      getReading(apiKey, text).catch(() => {});
+      getReading(apiKey, text, { voice, direction }).catch(() => {});
     }, PREFETCH_AFTER_MS);
     return () => clearTimeout(timer);
-  }, [enabled, text, apiKey]);
+  }, [enabled, text, apiKey, voice, direction]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -242,7 +319,7 @@ export default function useReadAloud(enabled, section, apiKey) {
 
       const words = spokenText(sectionRef.current);
       // A second P starts over from the top rather than talking over itself.
-      if (words) readAloud(words, apiKeyRef.current);
+      if (words) readAloud(words, apiKeyRef.current, actingRef.current);
       else {
         stopReading();
         speakWithBrowser("This page has no words yet.");
