@@ -1982,3 +1982,42 @@
 .second-tab-notice p {
   line-height: 1.5;
 }
+
+/* ---- voice acting ---- */
+
+.voice-acting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.voice-acting-row select {
+  max-width: 20rem;
+  padding: 0.35rem;
+  font: inherit;
+}
+
+.voice-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.voice-button-error {
+  color: #b00020;
+  font-size: 0.8rem;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-pager-middle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}

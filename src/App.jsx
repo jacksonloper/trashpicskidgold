@@ -4,6 +4,9 @@ import { hasRecentAgreement } from "./ageGateStore";
 import Navbar from "./components/Navbar";
 import ApiKeyInput from "./components/ApiKeyInput";
 import StyleEditor from "./components/StyleEditor";
+import VoiceActingEditor from "./components/VoiceActingEditor";
+import VoiceButton from "./components/VoiceButton";
+import { loadVoiceActing, saveVoiceActing } from "./voiceActingStore";
 import ReferenceGraphics from "./components/ReferenceGraphics";
 import Illustration from "./components/Illustration";
 import IllustrationPlanModal from "./components/IllustrationPlanModal";
@@ -801,6 +804,33 @@ export default function App() {
     [updateStory]
   );
 
+  /* ---- voice acting: kept on this computer, outside the story ---- */
+
+  const [voiceActing, setVoiceActing] = useState(() => ({
+    storyId: null,
+    ...loadVoiceActing(null),
+  }));
+  const storyIdForVoice = story?.id ?? null;
+  // Each story has its own; load it when the story changes (during render, so
+  // the first P on a newly opened story already uses the right voice).
+  if (voiceActing.storyId !== storyIdForVoice) {
+    setVoiceActing({
+      storyId: storyIdForVoice,
+      ...loadVoiceActing(storyIdForVoice),
+    });
+  }
+  const acting = useMemo(
+    () => ({ voice: voiceActing.voice, direction: voiceActing.direction }),
+    [voiceActing.voice, voiceActing.direction]
+  );
+  const handleVoiceActingChange = useCallback(
+    (next) => {
+      setVoiceActing({ storyId: storyIdForVoice, ...next });
+      saveVoiceActing(storyIdForVoice, next);
+    },
+    [storyIdForVoice]
+  );
+
   /* ---- reference graphics ---- */
 
   const handleAddRefGraphic = useCallback(() => {
@@ -1463,7 +1493,8 @@ export default function App() {
       !uploadRequest &&
       !!activeSection,
     activeSection,
-    settings.geminiVoice ? apiKey : ""
+    settings.geminiVoice ? apiKey : "",
+    acting
   );
 
   /* ---- acting on what is in the trash ---- */
@@ -1950,6 +1981,12 @@ export default function App() {
                 onStyleChange={handleStyleChange}
               />
 
+              <VoiceActingEditor
+                acting={acting}
+                onChange={handleVoiceActingChange}
+                disabled={!settings.geminiVoice}
+              />
+
               {/* Reference Graphics */}
               <ReferenceGraphics
                 referenceGraphics={referenceGraphics}
@@ -1978,8 +2015,16 @@ export default function App() {
                     >
                       ← Previous
                     </button>
-                    <span className="section-pager-label">
-                      {activeIndex + 1} of {sections.length}
+                    <span className="section-pager-middle">
+                      <span className="section-pager-label">
+                        {activeIndex + 1} of {sections.length}
+                      </span>
+                      <VoiceButton
+                        section={activeSection}
+                        apiKey={apiKey}
+                        acting={acting}
+                        voiceOff={!settings.geminiVoice}
+                      />
                     </span>
                     <button
                       type="button"
