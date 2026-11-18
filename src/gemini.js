@@ -1036,6 +1036,40 @@ let speechModelIndex = 0;
 /** A warm voice from Gemini's prebuilt set, picked for bedtime stories. */
 export const SPEECH_VOICE = "Sulafat";
 
+/** Gemini's prebuilt voices, each with the one word Google describes it by. */
+export const SPEECH_VOICES = [
+  ["Achernar", "Soft"],
+  ["Achird", "Friendly"],
+  ["Algenib", "Gravelly"],
+  ["Algieba", "Smooth"],
+  ["Alnilam", "Firm"],
+  ["Aoede", "Breezy"],
+  ["Autonoe", "Bright"],
+  ["Callirrhoe", "Easy-going"],
+  ["Charon", "Informative"],
+  ["Despina", "Smooth"],
+  ["Enceladus", "Breathy"],
+  ["Erinome", "Clear"],
+  ["Fenrir", "Excitable"],
+  ["Gacrux", "Mature"],
+  ["Iapetus", "Clear"],
+  ["Kore", "Firm"],
+  ["Laomedeia", "Upbeat"],
+  ["Leda", "Youthful"],
+  ["Orus", "Firm"],
+  ["Puck", "Upbeat"],
+  ["Pulcherrima", "Forward"],
+  ["Rasalgethi", "Informative"],
+  ["Sadachbia", "Lively"],
+  ["Sadaltager", "Knowledgeable"],
+  ["Schedar", "Even"],
+  ["Sulafat", "Warm"],
+  ["Umbriel", "Easy-going"],
+  ["Vindemiatrix", "Gentle"],
+  ["Zephyr", "Bright"],
+  ["Zubenelgenubi", "Casual"],
+].map(([name, feel]) => ({ name, feel }));
+
 /** What the reader is told before the words: how to read them. */
 export const SPEECH_DIRECTION =
   "Read this aloud warmly, at a natural pace, like a grown-up reading a " +
@@ -1049,15 +1083,20 @@ export const SPEECH_DIRECTION =
  *
  * @param {string} apiKey
  * @param {string} text – the words to say, already stripped of markdown
+ * @param {{ voice?: string, direction?: string }} [acting] – which voice, and
+ *   what it is told before the words; the defaults above when left out
  * @returns {Promise<{ pcm: ArrayBuffer, sampleRate: number }>}
  */
-export async function generateSpeech(apiKey, text) {
+export async function generateSpeech(apiKey, text, acting = {}) {
+  const voice = acting.voice || SPEECH_VOICE;
+  const direction = (acting.direction ?? SPEECH_DIRECTION).trim();
+  const prompt = direction ? `${direction}\n\n${text}` : text;
   const body = {
-    contents: [{ parts: [{ text: `${SPEECH_DIRECTION}\n\n${text}` }] }],
+    contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       responseModalities: ["AUDIO"],
       speechConfig: {
-        voiceConfig: { prebuiltVoiceConfig: { voiceName: SPEECH_VOICE } },
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
       },
     },
   };
