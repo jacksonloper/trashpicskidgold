@@ -1,12 +1,12 @@
 # Story Maker
 
-A lightweight React + Vite app for creating illustrated children's stories with AI. An adult works with a kid (who can't type yet) to build a character sheet and generate story page illustrations using the Gemini API.  Live at https://main--trashpicskidgold.netlify.app/
+A lightweight React + Vite app for creating illustrated children's stories with AI. An adult works with a kid (who can't type yet) to meet the characters — a caption and a reference picture for each — and generate story page illustrations using the Gemini API.  Live at https://main--trashpicskidgold.netlify.app/
 
 ## Features
 
 - **BYOK (Bring Your Own Key)** — paste your Gemini API key; nothing is stored on a server
-- **Character Sheet** — define up to 4 characters with names and descriptions, then generate a character model sheet
-- **Story Pages** — add illustrated pages with captions; each illustration uses the character sheet as a visual reference for consistency
+- **Meet the Characters** — the people, places and things of the story, each with a name, a caption saying what it looks like, and a reference picture. The caption is saved as it is typed and is what the picture is planned from, exactly as a page's caption is; a new character can be drawn with the ones already there in view, so a sister matches her brother and a character fits a place that already has its picture
+- **Story Pages** — add illustrated pages with captions; each illustration uses the reference pictures as visual references for consistency
 - **Keyboard-first navigation** — the story index sits down the left on a wide screen; `\` (or one `Tab`) reaches it, then `↑`/`↓` turn pages and land with the illustration fully in view (`Alt`+`↑`/`↓` while you type; hold either to go faster)
 - **Read it to me** — with the keyboard on the story index, `P` reads the page aloud: an illustration's caption, or the words of a text block. With a Gemini key the voice is Gemini's text-to-speech, read warmly like a picture book to a seven-year-old; a page that stays on screen for a moment has its reading fetched ahead, and every reading is kept in the browser, so a page is paid for once and replays instantly. Readings are a cache: they are never backed up or exported, and the oldest are let go after a few hundred. A page whose reading hasn't downloaded yet — or any page, without a key or after Gemini fails — is read by the browser's own voice instead, never kept waiting. Settings has a switch to turn Gemini's voice off and use the browser's for everything. Turning the page cuts it off mid-sentence, so the voice never lags behind the picture
 - **Voice acting** — the 🎙️ Voice Acting box under Illustration Style sets everything Gemini is told when it reads a story: which of its prebuilt voices, and a free-form direction sent ahead of each page's words (who's listening, the pace, how each character sounds). Changing either means every page is read afresh the next time it's heard; **🎙️ Make voice / Remake voice** beside the page counter has Gemini voice the page on screen now, replaces any take already kept, and plays it. Like the readings, the voice acting is kept on this computer only, per story — it isn't part of the story, so it's never exported or backed up
@@ -76,6 +76,34 @@ target for the new game. **▶ Free play** in the same dialog starts the chosen
 game on the spot, with nothing being made, for trying it out at length; `Esc`
 or the ✕ ends it.
 
+## Meet the characters
+
+The reference pictures began as a single character sheet and grew into a
+section of their own: one card per character, place or recurring thing, and
+every page is drawn with those pictures in view. A card now works the way a
+page does, rather than having its own smaller set of rules:
+
+- **The caption is kept.** Each card has a name and a one-line caption — who
+  this is and what they look like. The caption is saved as it is typed, like
+  a page's caption, whether or not a picture is ever made from it, and it
+  goes into the exported `story.md` and HTML under the picture.
+- **The caption is the material, not the prompt.** **Generate Reference**
+  plans first: the planning model is given the story's style, the caption,
+  the story's words (for what they say about the subject) and the other
+  reference pictures, and writes the prompt — a model sheet on white for a
+  character, an empty setting for a scene — then the picture is drawn.
+  **Generate Text & Preview** stops at the plan, in the same review dialog a
+  page uses, to read or change the prompt before spending a generation.
+- **A reference can be drawn from other references.** The planner says which
+  of the existing reference pictures the generator should be shown, and the
+  review dialog lets you tick or untick them. A character's own current
+  picture is never on that list: asking again means it is not right.
+- **Upload** and **Take from trash** sit under the buttons, as on a page, and
+  swap the same way: whatever the card held goes to the trash.
+
+Older stories carried the words typed into a reference's prompt box only once
+a generation had succeeded; those are read as the caption on first open.
+
 ## When a picture doesn't arrive
 
 Half the time a generation fails, Gemini has already said exactly why — and
@@ -115,7 +143,7 @@ goes to the trash instead:
 | What you did | What the trash says |
 | --- | --- |
 | Removed a page that had an illustration | *its page was removed* |
-| Removed a reference graphic | *its reference graphic was removed* |
+| Removed a character's reference picture | *its reference graphic was removed* |
 | Deleted a whole story | *its story was deleted* |
 | Generated or uploaded over an existing picture | *it was replaced by a new generation* |
 

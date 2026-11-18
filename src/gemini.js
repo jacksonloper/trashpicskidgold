@@ -13,35 +13,6 @@ export const TEXT_MODELS = [
   { id: "gemini-2.5-flash", label: "Fast" },
 ];
 
-/**
- * Build the complete prompt for generating a reference graphic.
- *
- * @param {string} style        – the user's illustration style description
- * @param {"character"|"scene"|"other"} kind
- * @param {string} userPrompt   – what the user typed
- * @param {string} [label]      – the reference graphic label (e.g. character name)
- * @returns {string}
- */
-export function buildRefGraphicPrompt(style, kind, userPrompt, label) {
-  if (kind === "character") {
-    const nameClause = label ? `The character's name is "${label}". ` : "";
-    return (
-      `${style}\n\n` +
-      `Character model sheet with a clean white background. ` +
-      `${nameClause}` +
-      `Show the character from the front in a simple standing pose.\n\n` +
-      `${userPrompt}\n\n` +
-      `Simple clean design, no background scenery, just the character on white. ` +
-      `Do NOT include any text, labels, captions, or writing in the image.`
-    );
-  }
-  if (kind === "scene") {
-    return `${style}\n\nReference scene illustration.\n\n${userPrompt}`;
-  }
-  // "other"
-  return `${style}\n\n${userPrompt}`;
-}
-
 /* ---- when the reply has nothing in it ---- */
 
 /**
@@ -654,6 +625,81 @@ export function parsePlannerReply(text, finishReason = null) {
 }
 
 /**
+ * Attach the pictures a planner may look at, each announced by a line of
+ * text naming its id, so the model can refer to it in `referenceImageIds`.
+ *
+ * @param {Array<object>} parts  – the request parts, appended to in place
+ * @param {Array<{imageId:string, label:string, kind:string}>} refs
+ * @param {Object<string,string>} allImages – imageId → dataUrl
+ */
+function attachReferenceImages(parts, refs, allImages) {
+  const imgMap = allImages || {};
+  for (const rg of refs) {
+    const dataUrl = imgMap[rg.imageId];
+    if (!dataUrl) continue;
+    parts.push({
+      text: `[Reference image: "${rg.label}" (${rg.kind}), imageId="${rg.imageId}"]`,
+    });
+    const base64 = dataUrl.split(",")[1];
+    const mimeType = dataUrl.split(";")[0].split(":")[1];
+    parts.push({ inlineData: { mimeType, data: base64 } });
+  }
+}
+
+/** One line per reference picture, for the planner's list of what exists. */
+function referenceLines(refs) {
+  return refs
+    .map((rg) => {
+      let line = `- imageId="${rg.imageId}", label="${rg.label}", kind="${rg.kind}"`;
+      if (rg.caption) line += `, description="${rg.caption}"`;
+      return line;
+    })
+    .join("\n");
+}
+
+/** The story's words, with each picture marked where it falls. */
+function storyAsText(sections) {
+  return sections
+    .map((s) => {
+      if (s.type === "markdown") return s.content;
+      if (s.type === "illustration")
+        return `[Illustration: ${s.caption || "(no caption)"}]`;
+      return "";
+    })
+    .join("\n\n");
+}
+
+/**
+ * Send a planning request and read the plan out of the reply.
+ *
+ * Both planners — a page's illustration and a reference picture — want the
+ * same thing back, `{ prompt, referenceImageIds }`, and fail the same ways,
+ * so the request and the reading of its answer live here once.
+ */
+async function askPlanner(apiKey, parts, model, doing) {
+  const useModel = model || DEFAULT_TEXT_MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{ parts }],
+    generationConfig: { responseMimeType: "application/json" },
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) await throwForStatus(res, useModel, doing);
+
+  const data = await res.json();
+  const { text, finishReason } = collectAnswerText(data);
+  if (!text.trim()) throw noTextError(data, useModel);
+
+  return parsePlannerReply(text, finishReason);
+}
+
+/**
  * Query the Gemini chat completion to plan an illustration.
  *
  * Given the full story context, returns:
@@ -667,7 +713,7 @@ export function parsePlannerReply(text, finishReason = null) {
  *
  * @param {string} apiKey
  * @param {string} style         – illustration style description
- * @param {Array<{id:string, label:string, kind:string, imageId:string|null, prompt:string}>} referenceGraphics
+ * @param {Array<{id:string, label:string, kind:string, imageId:string|null, caption:string}>} referenceGraphics
  * @param {Array} sections       – story sections
  * @param {string} targetCaption – the caption for the illustration to generate
  * @param {Object<string,string>} allImages – imageId → dataUrl map of all loaded images
@@ -683,26 +729,9 @@ export async function planIllustration(
   allImages,
   model
 ) {
-  const storyText = sections
-    .map((s) => {
-      if (s.type === "markdown") return s.content;
-      if (s.type === "illustration")
-        return `[Illustration: ${s.caption || "(no caption)"}]`;
-      return "";
-    })
-    .join("\n\n");
-
+  const storyText = storyAsText(sections);
   const refsWithImages = referenceGraphics.filter((rg) => rg.imageId);
-
-  const refLines = refsWithImages
-    .map((rg) => {
-      let line = `- imageId="${rg.imageId}", label="${rg.label}", kind="${rg.kind}"`;
-      if (rg.prompt) {
-        line += `, description="${rg.prompt}"`;
-      }
-      return line;
-    })
-    .join("\n");
+  const refLines = referenceLines(refsWithImages);
 
   const illustrationLines = sections
     .filter((s) => s.type === "illustration" && s.imageId)
@@ -731,45 +760,100 @@ export async function planIllustration(
       : ``) +
     `Respond ONLY with the JSON object, no extra text.`;
 
-  // Build multimodal parts: text message + reference images
+  // Text first, then the reference pictures so the planner can see them.
   const parts = [{ text: message }];
+  attachReferenceImages(parts, refsWithImages, allImages);
 
-  // Attach reference graphic images so the planning model can see them
-  const imgMap = allImages || {};
-  for (const rg of refsWithImages) {
-    const dataUrl = imgMap[rg.imageId];
-    if (dataUrl) {
-      parts.push({
-        text: `[Reference image: "${rg.label}" (${rg.kind}), imageId="${rg.imageId}"]`,
-      });
-      const base64 = dataUrl.split(",")[1];
-      const mimeType = dataUrl.split(";")[0].split(":")[1];
-      parts.push({
-        inlineData: { mimeType, data: base64 },
-      });
-    }
-  }
+  return askPlanner(apiKey, parts, model, "plan the illustration");
+}
 
-  const useModel = model || DEFAULT_TEXT_MODEL;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${apiKey}`;
-  const body = {
-    contents: [{ parts }],
-    generationConfig: { responseMimeType: "application/json" },
-  };
+/** What a reference picture of each kind is for, in the planner's brief. */
+const REFERENCE_KIND_RULES = {
+  character:
+    `This is a character model sheet: the character alone, from the front in a ` +
+    `simple standing pose, on a clean white background with no scenery. The ` +
+    `prompt must say the picture contains no text, labels, captions or writing.`,
+  scene:
+    `This is a reference picture of a place. Show the setting itself, empty of ` +
+    `characters unless the description puts one there, so pages set there can ` +
+    `be drawn to match it.`,
+  other:
+    `This is a reference picture of something that recurs in the story — an ` +
+    `object, a vehicle, a costume. Show it clearly on its own.`,
+};
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+/**
+ * Plan a reference picture — one of the "meet the characters" pictures that
+ * the pages are later drawn from.
+ *
+ * It works the way a page does. The grown-up's caption is the material, not
+ * the prompt: the planner turns it into a prompt in the story's style, with
+ * the framing a reference picture of that kind wants, and says which of the
+ * other reference pictures the generator should be shown — so a sister can be
+ * drawn to match her brother, or a character placed in a scene that already
+ * exists. The picture being made is not offered as its own reference: asking
+ * for it again means the one there now is not right.
+ *
+ * Returns { prompt, referenceImageIds, partial } like `planIllustration`.
+ *
+ * @param {string} apiKey
+ * @param {string} style
+ * @param {Array<{id:string, label:string, kind:string, imageId:string|null, caption:string}>} referenceGraphics
+ * @param {{id:string, label:string, kind:string, caption:string}} target – the one to draw
+ * @param {Array} sections       – the story, for what it says about the subject
+ * @param {Object<string,string>} allImages – imageId → dataUrl
+ * @param {string} [model]
+ */
+export async function planReferenceGraphic(
+  apiKey,
+  style,
+  referenceGraphics,
+  target,
+  sections,
+  allImages,
+  model
+) {
+  const storyText = storyAsText(sections);
+  const others = referenceGraphics.filter(
+    (rg) => rg.imageId && rg.id !== target.id
+  );
+  const refLines = referenceLines(others);
+  const kind = REFERENCE_KIND_RULES[target.kind] ? target.kind : "other";
+  const name = target.label?.trim();
 
-  if (!res.ok) await throwForStatus(res, useModel, "plan the illustration");
+  const message =
+    `You are helping create a reference picture for a story book: a picture ` +
+    `the illustrator will be shown later so that every page draws this ` +
+    `${kind} the same way.\n\n` +
+    `## Illustration style\n${style}\n\n` +
+    `## The story so far (for context only — this is not a scene from it)\n${storyText || "(empty)"}\n\n` +
+    `## Reference pictures that already exist\n${refLines || "(none)"}\n\n` +
+    `## Task\nThe user wants a reference picture of this ${kind}` +
+    (name ? `, called "${name}"` : "") +
+    `, described as:\n"${target.caption}"\n\n` +
+    `${REFERENCE_KIND_RULES[kind]}\n\n` +
+    `Please produce a JSON object with exactly two keys:\n` +
+    `1. "prompt" – a detailed image-generation prompt. ` +
+    `Start the prompt with the illustration style above so every picture is rendered consistently. ` +
+    (name && kind === "character"
+      ? `Name the character "${name}" in the prompt. `
+      : ``) +
+    `Describe the subject from the user's description, and from what the story says about it, ` +
+    `without inventing visual details that neither gives. ` +
+    `If an existing reference picture bears on this one — a family member whose features this ` +
+    `character should share, a scene this character belongs in, a character this scene is home to — ` +
+    `describe what should match it and instruct the generator to use the attached reference pictures for that.\n` +
+    `2. "referenceImageIds" – an array of imageId strings from the existing reference pictures above ` +
+    `that the image generator should be shown. Include only the ones that bear on this picture; an empty array is fine.\n\n` +
+    (others.length > 0
+      ? `The existing reference pictures are attached below, each preceded by a label. Study them before writing the prompt.\n\n`
+      : ``) +
+    `Respond ONLY with the JSON object, no extra text.`;
 
-  const data = await res.json();
-  const { text, finishReason } = collectAnswerText(data);
-  if (!text.trim()) throw noTextError(data, useModel);
+  const parts = [{ text: message }];
+  attachReferenceImages(parts, others, allImages);
 
-  return parsePlannerReply(text, finishReason);
+  return askPlanner(apiKey, parts, model, "plan the reference picture");
 }
 
 /**

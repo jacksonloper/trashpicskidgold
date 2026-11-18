@@ -236,6 +236,7 @@ export function createBlankStory(id) {
  * Handles:
  *  - characterSheetImageId → referenceGraphics array  (v1 → v2)
  *  - characters array → dropped; style field added    (v2 → v3)
+ *  - reference graphics: prompt → caption
  *  - sections given stable ids                        (v3 → v4)
  *
  * Returns a new object if migration was needed, or the original if already current.
@@ -267,18 +268,24 @@ export function migrateStory(story) {
     changed = true;
   }
 
-  // Ensure every referenceGraphic has a kind and a prompt field
-  const needsKindOrPrompt = (blob.referenceGraphics ?? []).some(
-    (rg) => !rg.kind || rg.prompt === undefined
+  // Every reference graphic carries a kind and a caption. The caption was
+  // once `prompt` — the words typed into a box that was only kept after a
+  // generation succeeded. It is the same text, now saved as it is typed and
+  // planned from like a page's caption, so it changes name with its role.
+  const needsKindOrCaption = (blob.referenceGraphics ?? []).some(
+    (rg) => !rg.kind || rg.caption === undefined || rg.prompt !== undefined
   );
-  if (needsKindOrPrompt) {
+  if (needsKindOrCaption) {
     blob = {
       ...blob,
-      referenceGraphics: blob.referenceGraphics.map((rg) => ({
-        ...rg,
-        kind: rg.kind || "other",
-        prompt: rg.prompt ?? "",
-      })),
+      referenceGraphics: blob.referenceGraphics.map((rg) => {
+        const { prompt, ...rest } = rg;
+        return {
+          ...rest,
+          kind: rg.kind || "other",
+          caption: rg.caption ?? prompt ?? "",
+        };
+      }),
     };
     changed = true;
   }

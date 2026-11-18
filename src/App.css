@@ -456,18 +456,26 @@
 
 /* ---- Age Gate ---- */
 
+/* On a phone the dialog is taller than the screen. Centring it with
+   align-items pushed its top and bottom off screen where nothing could
+   scroll to them, checkbox and Enter included; so the overlay scrolls, and
+   the dialog centres with auto margins, which give way to the top edge
+   instead of overflowing it. */
 .age-gate-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 1rem 0;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(4px);
 }
 
 .age-gate-dialog {
+  margin: auto;
   background: #fff;
   border-radius: 14px;
   padding: 2rem 2.5rem;
@@ -475,6 +483,13 @@
   width: 90%;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
   text-align: left;
+}
+
+@media (max-width: 480px) {
+  .age-gate-dialog {
+    padding: 1.25rem 1.25rem;
+    width: calc(100% - 2rem);
+  }
 }
 
 .age-gate-dialog h2 {
@@ -509,8 +524,9 @@
 }
 
 .age-gate-check input[type="checkbox"] {
-  width: 1.1rem;
-  height: 1.1rem;
+  flex: none;
+  width: 1.4rem;
+  height: 1.4rem;
   cursor: pointer;
 }
 
