@@ -59,6 +59,25 @@ export default function SettingsDialog({
               </span>
             </label>
           ))}
+          {settings.waitingGame === "last" && (
+            <label className="settings-option settings-suboption">
+              <input
+                type="checkbox"
+                checked={settings.middleVowel}
+                onChange={(e) =>
+                  onChange({ ...settings, middleVowel: e.target.checked })
+                }
+              />
+              <span>
+                <strong>Middle vowel for short words</strong>
+                <small>
+                  A one-syllable name with one short vowel — cat, dog, drum —
+                  asks for its vowel instead: C-?-T. Longer names, and ones
+                  like goat or shark, still ask for the last letter.
+                </small>
+              </span>
+            </label>
+          )}
         </fieldset>
 
         <p className="confirm-note">

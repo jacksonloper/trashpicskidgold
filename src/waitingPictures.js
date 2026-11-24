@@ -188,10 +188,36 @@ function withAnswers(pictures, letterOf) {
 
 const WAITING_PICTURES = withAnswers(PICTURES, (w) => w[0]);
 
-/** Same shape, but the answer is the letter each name ends on. */
+/*
+ * Where a one-syllable name's vowel is, for the last-letter game's "middle
+ * vowel" setting — or -1 for a name that doesn't get asked that way.
+ *
+ * Only a name whose middle is one plain, short vowel qualifies: C-?-T, D-?-G,
+ * D-R-?-M. The same care as with last letters applies, so a name is left to
+ * the last-letter question when its vowel isn't that vowel's own short sound:
+ *
+ * - Two vowels together (goat, moon, sheep, bread) — which one is "the" vowel?
+ * - A vowel at either end (ant, egg) has no consonants to sit between.
+ * - A vowel before R, W or Y melts into it (shark, bird, corn, crown).
+ * - An A before L says "aw" (ball).
+ */
+export function middleVowelAt(word) {
+  const match = /^([^aeiou]+)([aeiou])[^aeiou]+$/.exec(word);
+  if (!match) return -1;
+  const at = match[1].length;
+  const next = word[at + 1];
+  if ("rwy".includes(next)) return -1;
+  if (match[2] === "a" && next === "l") return -1;
+  return at;
+}
+
+/**
+ * Same shape, but the answer is the letter each name ends on — and, for the
+ * names that can be asked the other way, where their middle vowel is.
+ */
 export const LAST_LETTER_WAITING_PICTURES = withAnswers(
   LAST_LETTER_PICTURES,
   (w) => (endsOnItsOwnSound(w) ? w[w.length - 1] : null)
-);
+).map((picture) => ({ ...picture, vowelAt: middleVowelAt(picture.word) }));
 
 export default WAITING_PICTURES;

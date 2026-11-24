@@ -1927,6 +1927,11 @@
   gap: 0.15rem;
 }
 
+/* A setting that belongs to the option above it. */
+.settings-suboption {
+  margin-left: 1.75rem;
+}
+
 .settings-option small {
   color: #666;
   font-size: 0.85rem;

@@ -28,6 +28,9 @@ export const WAITING_GAMES = [
 
 export const DEFAULT_SETTINGS = Object.freeze({
   waitingGame: "letter",
+  // In the last-letter game, a one-syllable name like "cat" asks for its
+  // middle vowel (C-?-T) instead of its last letter.
+  middleVowel: false,
   // P reads in Gemini's voice (fetched with the API key) rather than the
   // browser's own.
   geminiVoice: true,
@@ -48,6 +51,10 @@ export function loadSettings() {
       waitingGame: isWaitingGame(saved?.waitingGame)
         ? saved.waitingGame
         : DEFAULT_SETTINGS.waitingGame,
+      middleVowel:
+        typeof saved?.middleVowel === "boolean"
+          ? saved.middleVowel
+          : DEFAULT_SETTINGS.middleVowel,
       geminiVoice:
         typeof saved?.geminiVoice === "boolean"
           ? saved.geminiVoice

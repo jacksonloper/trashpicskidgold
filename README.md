@@ -71,6 +71,13 @@ answer instead — and a finger dragged across it still scrolls the page.
   or a pair like `gh`, `sh` or `ng` is dropped from the game, even if someone
   adds it.
 
+  Under it, **Middle vowel for short words** switches one-syllable names to
+  the middle: a 🐱 is `C`-`?`-`T`, and `A` fills it. Only a name with one
+  plain short vowel between consonants is asked this way — cat, dog, drum,
+  bell — so nobody has to pick between the two O's of "moon" or explain the
+  A in "ball". The rest (goat, shark, ant, and every longer name) still ask
+  for the last letter. On a phone, the letters to tap are all vowels.
+
 The choice is remembered in the browser. Switching mid-wait deals a fresh
 target for the new game. **▶ Free play** in the same dialog starts the chosen
 game on the spot, with nothing being made, for trying it out at length; `Esc`

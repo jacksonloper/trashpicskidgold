@@ -2333,8 +2333,9 @@ export default function App() {
           the picture can be watched as it lands. */}
       {waitGame.on && (
         <WaitingGame
-          key={settings.waitingGame}
+          key={`${settings.waitingGame}-${settings.middleVowel}`}
           game={settings.waitingGame}
+          middleVowel={settings.middleVowel}
           visible={waitGame.visible}
           leaving={waitGame.leaving}
           freePlay={freePlay}

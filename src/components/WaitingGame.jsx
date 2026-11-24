@@ -22,6 +22,10 @@ import WAITING_PICTURES, {
  *   wrong guesses and that one's a miss: the answer fills itself in, no star,
  *   and the next picture comes along.
  *
+ *   With the "middle vowel" setting on, a one-syllable name with a plain short
+ *   vowel in it — cat, dog, drum — leaves its vowel empty instead: C, ?, T.
+ *   Every other name still asks for its last letter.
+ *
  * It deliberately does not cover the page. There is no panel, no dimmed
  * backdrop and no pointer events anywhere except the little ✕ (and the answer
  * buttons on a touch screen) — the story, the buttons and the picture as it
@@ -30,6 +34,8 @@ import WAITING_PICTURES, {
  */
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+/** Decoys for a vowel: one consonant among them would give the game away. */
+const VOWELS = "AEIOU";
 
 const COLORS = [
   "#e5397c",
@@ -89,48 +95,61 @@ function drawSparks() {
 function drawLetter(previous) {
   let char = previous;
   while (char === previous) char = pick(ALPHABET);
-  return { char, answers: [char], word: null, choices: null };
+  return { char, answers: [char], word: null, asked: null, choices: null };
 }
 
 /**
  * A picture, the letters that answer it, and — for a touch screen — a few
  * letters to choose from, one of them right.
  *
- * @param answersOf  the letters a picture takes: every first letter its names
- *                   have, or the one letter the spelled-out name ends on
+ * @param ask  what a picture is asked: the letters it takes (every first
+ *             letter its names have, or the one letter in the caterpillar's
+ *             empty segment) and, for the caterpillar, which segment that is
  */
-function drawPicture(pictures, previous, answersOf) {
+function drawPicture(pictures, previous, ask) {
   let picture = null;
   while (!picture || picture.emoji === previous) picture = pick(pictures);
-  const answers = answersOf(picture);
+  const { answers, asked = null } = ask(picture);
+  const pool = VOWELS.includes(answers[0]) && asked !== null ? VOWELS : ALPHABET;
   const choices = [answers[0]];
   while (choices.length < CHOICES) {
-    const decoy = pick(ALPHABET);
+    const decoy = pick(pool);
     if (!answers.includes(decoy) && !choices.includes(decoy)) {
       choices.push(decoy);
     }
   }
   choices.sort();
-  return { char: picture.emoji, answers, word: picture.word, choices };
+  return { char: picture.emoji, answers, word: picture.word, asked, choices };
 }
 
 /** The letters a picture's names start with — D or P for a 🐶. */
-const firstLetters = (picture) => picture.answers;
+const firstLetters = (picture) => ({ answers: picture.answers });
 
 /**
- * The one letter the name on the caterpillar ends with. The list already
+ * The one letter missing from the name on the caterpillar: the last, or — with
+ * `middleVowel`, for a name that has one — its middle vowel. The list already
  * holds a single answer per picture; reading it off the word anyway means the
  * empty segment and the key that fills it can never be two different letters.
  */
-const lastLetterOfWord = (picture) => [picture.word.at(-1).toUpperCase()];
+const missingLetter = (middleVowel) => (picture) => {
+  const asked =
+    middleVowel && picture.vowelAt >= 0
+      ? picture.vowelAt
+      : picture.word.length - 1;
+  return { answers: [picture.word[asked].toUpperCase()], asked };
+};
 
 /** The next thing to find: what shows, what answers it, and its colour. */
-function drawTarget(game, previous) {
+function drawTarget(game, previous, middleVowel) {
   const drawn =
     game === "picture"
       ? drawPicture(WAITING_PICTURES, previous, firstLetters)
       : game === "last"
-        ? drawPicture(LAST_LETTER_WAITING_PICTURES, previous, lastLetterOfWord)
+        ? drawPicture(
+            LAST_LETTER_WAITING_PICTURES,
+            previous,
+            missingLetter(middleVowel)
+          )
         : drawLetter(previous);
   return { id: nextId++, color: pick(COLORS), sparks: drawSparks(), ...drawn };
 }
@@ -169,14 +188,15 @@ function Poof({ target, picture }) {
 /**
  * The word under the picture in the last-letter game, spelled out along a
  * caterpillar: a face, then a segment per letter, in rainbow order from the
- * target's own colour. The tail segment is the one being asked for — empty
- * and waiting until the right key fills it in.
+ * target's own colour. One segment is the one being asked for — the tail, or
+ * the middle vowel — empty and waiting until the right key fills it in.
  *
- * @param filled  the word has been answered: show the last letter too
+ * @param asked   which letter is missing
+ * @param filled  the word has been answered: show the missing letter too
  * @param missed  …but by running out of guesses, not by the right key
  * @param wrong   a wrong key was just pressed: the empty segment shakes
  */
-function Caterpillar({ word, color, filled, missed, wrong }) {
+function Caterpillar({ word, asked, color, filled, missed, wrong }) {
   const letters = word.toUpperCase().split("");
   const first = Math.max(0, COLORS.indexOf(color));
   return (
@@ -189,7 +209,7 @@ function Caterpillar({ word, color, filled, missed, wrong }) {
         style={{ backgroundColor: COLORS[first] }}
       />
       {letters.map((letter, i) => {
-        const last = i === letters.length - 1;
+        const last = i === asked;
         const background = COLORS[(first + i + 1) % COLORS.length];
         return (
           <b
@@ -220,11 +240,15 @@ function Caterpillar({ word, color, filled, missed, wrong }) {
 /**
  * @param game      "letter", "picture" or "last" — which game to play. The first target
  *                  is dealt on mount, so a switch mid-wait wants a new `key`.
+ * @param middleVowel  in the last-letter game, ask a one-syllable name for its
+ *                  middle vowel rather than its last letter (also wants a new
+ *                  `key` when it changes)
  * @param freePlay  nothing is being made: the ✕ ends the game rather than
  *                  hiding it until the next picture
  */
 export default function WaitingGame({
   game = "letter",
+  middleVowel = false,
   visible,
   leaving,
   freePlay = false,
@@ -235,8 +259,9 @@ export default function WaitingGame({
   // The last-letter game spells the name out, so nothing about it is a secret
   // but the one letter asked for.
   const spelled = game === "last";
-  const ends = spelled ? "end" : "start";
-  const [target, setTarget] = useState(() => drawTarget(game, null));
+  const [target, setTarget] = useState(() =>
+    drawTarget(game, null, middleVowel)
+  );
   const [poof, setPoof] = useState(null);
   const [found, setFound] = useState(0);
   const [wrong, setWrong] = useState(false);
@@ -253,6 +278,7 @@ export default function WaitingGame({
   const closeRef = useRef(onClose);
   const hideRef = useRef(onHide);
   const gameRef = useRef(game);
+  const middleVowelRef = useRef(middleVowel);
   const missesRef = useRef(misses);
   useEffect(() => {
     missesRef.current = misses;
@@ -260,6 +286,7 @@ export default function WaitingGame({
     closeRef.current = onClose;
     hideRef.current = onHide;
     gameRef.current = game;
+    middleVowelRef.current = middleVowel;
   });
 
   const later = useCallback((fn, ms) => {
@@ -291,7 +318,11 @@ export default function WaitingGame({
           setMisses(0);
           setFailed(current);
           later(() => {
-            const next = drawTarget(gameRef.current, current.char);
+            const next = drawTarget(
+              gameRef.current,
+              current.char,
+              middleVowelRef.current
+            );
             targetRef.current = next;
             setTarget(next);
             setFailed(null);
@@ -312,7 +343,11 @@ export default function WaitingGame({
       setPoof(current);
       setFound((n) => n + 1);
       later(() => {
-        const next = drawTarget(gameRef.current, current.char);
+        const next = drawTarget(
+              gameRef.current,
+              current.char,
+              middleVowelRef.current
+            );
         targetRef.current = next;
         setTarget(next);
         setPoof(null);
@@ -351,8 +386,16 @@ export default function WaitingGame({
     return () => clearTimeout(id);
   }, [leaving]);
 
+  // Whether the missing letter is a middle vowel rather than the last one.
+  const isMiddle = (t) => !!t && t.asked !== null && t.asked < t.word.length - 1;
+  const question = (t) =>
+    !spelled
+      ? "What letter does it start with?"
+      : isMiddle(t)
+        ? "What vowel goes in the middle?"
+        : "What letter does it end with?";
   const prompt = picture
-    ? `What letter does it ${ends} with?`
+    ? question(target ?? poof ?? failed)
     : tappable
       ? "Tap the letter!"
       : "Type the letter!";
@@ -362,12 +405,12 @@ export default function WaitingGame({
     picture && !spelled && target && misses >= HINT_AFTER ? target.word : null;
   const label = spelled
     ? `A ${target?.word}, spelled ${target?.word
-        .slice(0, -1)
         .toUpperCase()
         .split("")
-        .join(", ")}, and one more. What letter does it end with?`
+        .map((c, i) => (i === target.asked ? "something" : c))
+        .join(", ")}. ${question(target)}`
     : picture
-      ? `A ${target?.word}. What letter does it ${ends} with?`
+      ? `A ${target?.word}. ${question(target)}`
       : `Find the letter ${target?.char}`;
   // The caterpillar stays while the answered word poofs, filled in at last.
   // A missed one stays too, with its answer shown.
@@ -406,7 +449,9 @@ export default function WaitingGame({
             key={`missed-${failed.id}`}
             className="waiting-letter-glyph is-picture is-missed"
             role="img"
-            aria-label={`It was a ${failed.word}, ending in ${failed.answers[0]}.`}
+            aria-label={`It was a ${failed.word}, ${
+              isMiddle(failed) ? "with" : "ending in"
+            } ${failed.answers[0]}.`}
           >
             {failed.char}
           </span>
@@ -437,6 +482,7 @@ export default function WaitingGame({
         <Caterpillar
           key={spelling.id}
           word={spelling.word}
+          asked={spelling.asked}
           color={spelling.color}
           filled={!target}
           missed={spelling === failed}
@@ -448,7 +494,9 @@ export default function WaitingGame({
         <p className="waiting-letter-pill">
           <span>
             {failed
-              ? `It ends with ${failed.answers[0]}!`
+              ? isMiddle(failed)
+                ? `The middle is ${failed.answers[0]}!`
+                : `It ends with ${failed.answers[0]}!`
               : hint
                 ? `It's a ${hint}!`
                 : prompt}
