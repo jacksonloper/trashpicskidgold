@@ -2,6 +2,7 @@ import SectionHeader from "./SectionHeader";
 
 export default function MarkdownSection({
   index,
+  editedAt,
   content,
   onContentChange,
   onRemove,
@@ -13,6 +14,7 @@ export default function MarkdownSection({
       <SectionHeader
         title={`📝 Text Block ${index + 1}`}
         noun="text block"
+        editedAt={editedAt}
         onMoveUp={onMoveUp}
         onMoveDown={onMoveDown}
         onRemove={onRemove}

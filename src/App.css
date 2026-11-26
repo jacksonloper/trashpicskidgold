@@ -257,6 +257,22 @@
   margin: 0;
 }
 
+.section-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.section-edited,
+.section-index-summary {
+  color: #777;
+  font-size: 0.8rem;
+}
+
+.section-index-summary {
+  margin: -0.25rem 0 0.5rem;
+}
+
 .caption-input {
   width: 100%;
   padding: 0.5rem 0.75rem;

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useHasReading } from "../useReadAloud";
+import { formatEdited } from "../editedAt";
 
 /**
  * A tiny microphone on a row whose page already has Gemini's reading kept
@@ -51,6 +52,7 @@ export default function SectionIndex({
   onAddIllustration,
   acting,
   voiceOff,
+  storyUpdatedAt,
 }) {
   const activeRef = useRef(null);
 
@@ -68,9 +70,29 @@ export default function SectionIndex({
     }
   }, [activeId]);
 
+  const pages = sections.filter((s) => s.type === "illustration").length;
+  const texts = sections.length - pages;
+  const edited = formatEdited(storyUpdatedAt);
+
   return (
     <section className="card section-index">
       <h2>📚 Story Sections</h2>
+      <p className="section-index-summary">
+        {pages} {pages === 1 ? "page" : "pages"}
+        {texts > 0 && (
+          <>
+            {" "}· {texts} text {texts === 1 ? "block" : "blocks"}
+          </>
+        )}
+        {edited && (
+          <>
+            {" "}· last edited{" "}
+            <time dateTime={new Date(storyUpdatedAt).toISOString()}>
+              {edited}
+            </time>
+          </>
+        )}
+      </p>
       <p className="section-description">
         Your story in order — pick a page to work on it. <kbd>{"\\"}</kbd> (or{" "}
         <kbd>Tab</kbd>) jumps to the list, then plain <kbd>↑</kbd>/<kbd>↓</kbd>{" "}
@@ -106,6 +128,11 @@ export default function SectionIndex({
                   // are on, and the arrows take over from there.
                   tabIndex={isActive ? 0 : -1}
                   aria-keyshortcuts={isActive ? "\\ P" : undefined}
+                  title={
+                    sec.editedAt
+                      ? `Last edited ${formatEdited(sec.editedAt)}`
+                      : "Last edit not recorded"
+                  }
                   onClick={() => onSelect(sec.id)}
                 >
                   <span className="section-index-num">{idx + 1}</span>
