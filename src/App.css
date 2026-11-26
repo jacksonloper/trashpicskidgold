@@ -1047,6 +1047,13 @@
   white-space: nowrap;
 }
 
+.section-index-voice {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0.75;
+}
+
 .section-index-badge {
   flex-shrink: 0;
   padding: 0.1rem 0.45rem;
