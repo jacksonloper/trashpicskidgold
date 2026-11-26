@@ -7,18 +7,35 @@
  * say it in words now; the tooltip names what moves and where it goes.
  *
  * `noun` is what this section is called in that copy: a "page", a "text
- * block".
+ * block". `editedAt` is when it last changed, if that is known.
  */
+import { formatEdited } from "../editedAt";
+
 export default function SectionHeader({
   title,
   noun,
+  editedAt,
   onMoveUp,
   onMoveDown,
   onRemove,
 }) {
   return (
     <div className="section-header">
-      <h3>{title}</h3>
+      <div className="section-header-title">
+        <h3>{title}</h3>
+        <span className="section-edited">
+          {editedAt ? (
+            <>
+              Last edited{" "}
+              <time dateTime={new Date(editedAt).toISOString()}>
+                {formatEdited(editedAt)}
+              </time>
+            </>
+          ) : (
+            "Last edit not recorded"
+          )}
+        </span>
+      </div>
       <div className="section-header-actions">
         <button
           type="button"

@@ -6,6 +6,7 @@ import ApiKeyInput from "./components/ApiKeyInput";
 import StyleEditor from "./components/StyleEditor";
 import VoiceActingEditor from "./components/VoiceActingEditor";
 import VoiceButton from "./components/VoiceButton";
+import { stampEditedSections, stampSection } from "./editedAt";
 import { loadVoiceActing, saveVoiceActing } from "./voiceActingStore";
 import ReferenceGraphics from "./components/ReferenceGraphics";
 import Illustration from "./components/Illustration";
@@ -411,7 +412,10 @@ export default function App() {
     (fn) => {
       setStory((prev) => {
         if (!prev) return prev;
-        const next = typeof fn === "function" ? fn(prev) : { ...prev, ...fn };
+        const next = stampEditedSections(
+          prev,
+          typeof fn === "function" ? fn(prev) : { ...prev, ...fn }
+        );
         scheduleSave(next);
         return next;
       });
@@ -977,7 +981,9 @@ export default function App() {
               jsonblob: {
                 ...blob,
                 sections: blob.sections.map((x) =>
-                  x.id === where.sectionId ? { ...x, imageId: imgId } : x
+                  x.id === where.sectionId
+                    ? stampSection({ ...x, imageId: imgId })
+                    : x
                 ),
               },
             },
@@ -2104,6 +2110,7 @@ export default function App() {
               onAddIllustration={addIllustrationSection}
               acting={acting}
               voiceOff={!settings.geminiVoice}
+              storyUpdatedAt={story.updatedAt}
             />
           </aside>
         )}
@@ -2218,6 +2225,7 @@ export default function App() {
                     <MarkdownSection
                       key={activeSection.id}
                       index={activeIndex}
+                      editedAt={activeSection.editedAt}
                       content={activeSection.content}
                       onContentChange={(val) =>
                         updateSectionField(activeSection.id, "content", val)
@@ -2238,6 +2246,7 @@ export default function App() {
                     <Illustration
                       key={activeSection.id}
                       index={activeIndex}
+                      editedAt={activeSection.editedAt}
                       caption={activeSection.caption}
                       imageUrl={
                         activeSection.imageId

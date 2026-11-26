@@ -6,6 +6,7 @@ import oneLine from "../oneLine";
 
 export default function Illustration({
   index,
+  editedAt,
   caption,
   imageUrl,
   generating,
@@ -30,6 +31,7 @@ export default function Illustration({
       <SectionHeader
         title={`Page ${index + 1}`}
         noun="page"
+        editedAt={editedAt}
         onMoveUp={onMoveUp}
         onMoveDown={onMoveDown}
         onRemove={onRemove}
