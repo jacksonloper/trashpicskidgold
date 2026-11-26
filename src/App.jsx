@@ -2102,6 +2102,8 @@ export default function App() {
               onSelect={handleSelectSection}
               onAddMarkdown={addMarkdownSection}
               onAddIllustration={addIllustrationSection}
+              acting={acting}
+              voiceOff={!settings.geminiVoice}
             />
           </aside>
         )}

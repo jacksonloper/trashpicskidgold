@@ -1,4 +1,23 @@
 import { useEffect, useRef } from "react";
+import { useHasReading } from "../useReadAloud";
+
+/**
+ * A tiny microphone on a row whose page already has Gemini's reading kept
+ * for the current voice acting, so P will play it straight away.
+ */
+function VoiceMark({ section, acting }) {
+  const has = useHasReading(section, acting);
+  if (!has) return null;
+  return (
+    <span
+      className="section-index-voice"
+      title="Voice ready: P plays Gemini's reading of this page"
+      aria-label="voice ready"
+    >
+      🎙️
+    </span>
+  );
+}
 
 /** One line of preview text for a section row. */
 function preview(sec) {
@@ -30,6 +49,8 @@ export default function SectionIndex({
   onSelect,
   onAddMarkdown,
   onAddIllustration,
+  acting,
+  voiceOff,
 }) {
   const activeRef = useRef(null);
 
@@ -92,6 +113,9 @@ export default function SectionIndex({
                     {sec.type === "illustration" ? "🖼️" : "📝"}
                   </span>
                   <span className="section-index-text">{preview(sec)}</span>
+                  {acting && !voiceOff && (
+                    <VoiceMark section={sec} acting={acting} />
+                  )}
                   {busy ? (
                     <span className="section-index-badge is-busy">{busy}</span>
                   ) : sec.type === "illustration" && !sec.imageId ? (
