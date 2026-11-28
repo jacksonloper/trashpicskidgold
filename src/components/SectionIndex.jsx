@@ -94,12 +94,12 @@ export default function SectionIndex({
         )}
       </p>
       <p className="section-description">
-        Your story in order — pick a page to work on it. <kbd>{"\\"}</kbd> (or{" "}
-        <kbd>Tab</kbd>) jumps to the list, then plain <kbd>↑</kbd>/<kbd>↓</kbd>{" "}
-        (or <kbd>j</kbd>/<kbd>k</kbd>, <kbd>Home</kbd>/<kbd>End</kbd>) turn
-        pages. <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> does the same while you
-        are typing; hold either to go faster. <kbd>P</kbd> reads the page
-        aloud; turning the page stops it.
+        Your story in order — pick a page to work on it. Unless you are typing,{" "}
+        <kbd>↑</kbd>/<kbd>↓</kbd> (or <kbd>j</kbd>/<kbd>k</kbd>,{" "}
+        <kbd>Home</kbd>/<kbd>End</kbd>) turn pages from anywhere;{" "}
+        <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> does the same while you are
+        typing. Hold either to go faster. <kbd>P</kbd> reads the page aloud;
+        turning the page stops it. <kbd>{"\\"}</kbd> jumps to the list.
       </p>
 
       {sections.length === 0 ? (

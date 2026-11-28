@@ -3,6 +3,7 @@ import { getSpeech, putSpeech } from "./db";
 import { sha256Hex } from "./driveBackup/hashing";
 import { generateSpeech } from "./gemini";
 import { DEFAULT_VOICE_ACTING } from "./voiceActingStore";
+import { letterShortcutAvailable } from "./keyboardScope";
 
 /**
  * What a page says out loud: its caption, or the words of a text block.
@@ -27,21 +28,17 @@ export function spokenText(section) {
     .trim();
 }
 
-/** The one key that reads the page: a bare P, nowhere near a text box. */
+/**
+ * The one key that reads the page: a bare P, from anywhere but a text box, an
+ * open dialog, or the waiting game (where P is a guess).
+ */
 function isReadKey(event) {
-  const el = event.target;
-  const typing =
-    el &&
-    (el.isContentEditable ||
-      el.tagName === "INPUT" ||
-      el.tagName === "TEXTAREA" ||
-      el.tagName === "SELECT");
   return (
     (event.key === "p" || event.key === "P") &&
     !event.ctrlKey &&
     !event.metaKey &&
     !event.altKey &&
-    !typing
+    letterShortcutAvailable(event)
   );
 }
 
@@ -311,9 +308,7 @@ export default function useReadAloud(
     if (!enabled) return undefined;
 
     const handleKeyDown = (event) => {
-      const listHasFocus =
-        document.activeElement?.classList.contains("section-index-row");
-      if (!listHasFocus || !isReadKey(event)) return;
+      if (!isReadKey(event)) return;
       event.preventDefault();
       if (event.repeat) return;
 

@@ -1,4 +1,9 @@
 import { useEffect, useRef } from "react";
+import {
+  letterShortcutAvailable,
+  overlayOpen,
+  shortcutsAvailable,
+} from "./keyboardScope";
 
 /*
  * Held-key repeat.
@@ -13,24 +18,13 @@ const FIRST_GAP = 180; // ms between the first repeats
 const FASTEST_GAP = 45; // ms it accelerates to
 const ACCELERATION = 0.82; // each repeat shortens the gap by this much
 
-/** Somewhere the arrow keys already mean something to the user. */
-function isTypingTarget(el) {
-  if (!el) return false;
-  return (
-    el.isContentEditable ||
-    el.tagName === "INPUT" ||
-    el.tagName === "TEXTAREA" ||
-    el.tagName === "SELECT"
-  );
-}
-
 /**
  * The key that hands the keyboard to the section list.
  *
  * Backslash is unshifted, nowhere near the arrows, and means nothing else in
  * the app — so it is free to be the one stop between wherever you are and the
  * list, the way Tab used to be. It stays out of the way while you are typing,
- * where a backslash is just a backslash.
+ * where a backslash is just a backslash, and while a dialog is open.
  */
 function isFocusListKey(event) {
   return (
@@ -39,7 +33,7 @@ function isFocusListKey(event) {
     !event.metaKey &&
     !event.altKey &&
     !event.shiftKey &&
-    !isTypingTarget(event.target)
+    shortcutsAvailable(event)
   );
 }
 
@@ -64,27 +58,28 @@ function focusSectionList() {
  * Which way a key event moves, or null when it isn't ours.
  *
  * Alt+↑/↓ works anywhere, including mid-caption, so you never have to leave
- * the text box to change pages. The bare keys only apply once focus is on the
- * section list itself — otherwise they would steal the arrow keys from
- * scrolling the page, and ← → from the caption you are editing.
+ * the text box to change pages. The bare keys work wherever focus is, as long
+ * as nothing is being typed and no dialog is open (see keyboardScope) — the
+ * price is that the arrows no longer scroll the page, which the page turns
+ * themselves already do.
  *
  * Alt+←/→ is deliberately not bound: that is Back and Forward in the browser.
  */
-function directionFor(event, listHasFocus) {
+function directionFor(event) {
   const plainAlt = event.altKey && !event.ctrlKey && !event.metaKey;
   if (plainAlt) {
+    if (overlayOpen()) return null;
     if (event.key === "ArrowUp") return "prev";
     if (event.key === "ArrowDown") return "next";
     return null;
   }
 
   if (
-    !listHasFocus ||
     event.ctrlKey ||
     event.metaKey ||
     event.altKey ||
     event.shiftKey ||
-    isTypingTarget(event.target)
+    !shortcutsAvailable(event)
   ) {
     return null;
   }
@@ -92,12 +87,15 @@ function directionFor(event, listHasFocus) {
   switch (event.key) {
     case "ArrowUp":
     case "ArrowLeft":
-    case "k":
       return "prev";
     case "ArrowDown":
     case "ArrowRight":
-    case "j":
       return "next";
+    // While the waiting game is up, letters are guesses, not page turns.
+    case "k":
+      return letterShortcutAvailable(event) ? "prev" : null;
+    case "j":
+      return letterShortcutAvailable(event) ? "next" : null;
     case "Home":
       return "first";
     case "End":
@@ -141,16 +139,13 @@ export default function useSectionShortcuts(enabled, onNavigate) {
     };
 
     const handleKeyDown = (event) => {
-      const listHasFocus =
-        document.activeElement?.classList.contains("section-index-row");
-
       if (isFocusListKey(event)) {
         // Only swallow the key if there was a list to jump to.
         if (focusSectionList()) event.preventDefault();
         return;
       }
 
-      const direction = directionFor(event, listHasFocus);
+      const direction = directionFor(event);
       if (!direction) return;
 
       event.preventDefault();
