@@ -1,4 +1,5 @@
 import { backupState, BACKUP_GLYPH } from "../driveBackup/backupState";
+import StoryPicker from "./StoryPicker";
 
 export default function Navbar({
   ref,
@@ -25,31 +26,22 @@ export default function Navbar({
       <span className="navbar-brand">📖 Story Maker</span>
 
       <div className="navbar-stories">
-        <select
-          className="story-select"
-          value={activeStoryId || ""}
-          onChange={(e) => onSelectStory(e.target.value)}
-        >
-          {stories.length === 0 && (
-            <option value="" disabled>
-              No stories yet
-            </option>
-          )}
-          {/* With the backup on, each title gets a glyph: ✅ on Drive and
-              checked, ⏳ waiting to go up, ❌ a file on Drive differs. A story
-              this browser refused to save gets ❗ whatever Drive says: what
-              Drive holds is not what is on screen. */}
-          {stories.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.id === unsavedStoryId
-                ? "❗ "
-                : driveRecords
-                  ? `${BACKUP_GLYPH[backupState(s, driveRecords[s.id])]} `
-                  : ""}
-              {s.title || "Untitled"}
-            </option>
-          ))}
-        </select>
+        {/* With the backup on, each title gets a glyph: ✅ on Drive and
+            checked, ⏳ waiting to go up, ❌ a file on Drive differs. A story
+            this browser refused to save gets ❗ whatever Drive says: what
+            Drive holds is not what is on screen. */}
+        <StoryPicker
+          stories={stories}
+          activeStoryId={activeStoryId}
+          onSelect={onSelectStory}
+          glyphFor={(s) =>
+            s.id === unsavedStoryId
+              ? "❗ "
+              : driveRecords
+                ? `${BACKUP_GLYPH[backupState(s, driveRecords[s.id])]} `
+                : ""
+          }
+        />
 
         <button type="button" className="btn-small" onClick={onNewStory}>
           + New Story

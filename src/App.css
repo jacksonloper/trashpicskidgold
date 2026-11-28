@@ -61,6 +61,100 @@
   max-width: 220px;
 }
 
+.story-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.story-picker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 220px;
+  max-width: 100%;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.story-picker-button:disabled {
+  cursor: default;
+  color: #888;
+}
+
+.story-picker-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-picker-caret {
+  color: #777;
+  font-size: 0.75rem;
+}
+
+/* The list scrolls inside the panel, so a long shelf never runs off the window. */
+.story-picker-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  width: min(320px, calc(100vw - 1.5rem));
+  display: flex;
+  flex-direction: column;
+  max-height: min(70vh, 28rem);
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.story-picker-filter {
+  margin: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.story-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0.35rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.story-picker-option,
+.story-picker-empty {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.story-picker-option {
+  cursor: pointer;
+}
+
+.story-picker-option.is-highlighted {
+  background: #e8f0fe;
+}
+
+.story-picker-option.is-current {
+  font-weight: 600;
+}
+
+.story-picker-empty {
+  color: #888;
+  font-style: italic;
+}
+
 .btn-danger {
   color: #c62828;
   border-color: #ef9a9a;
