@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { letterShortcutAvailable } from "../keyboardScope";
 
 /*
  * The story chooser.
@@ -65,6 +66,32 @@ export default function StoryPicker({ stories, activeStoryId, onSelect, glyphFor
       ?.scrollIntoView({ block: "nearest" });
   }, [open, highlight, filtered]);
 
+  // S opens it from anywhere — unless typing, a dialog is up, or the waiting
+  // game is listening for letters (see keyboardScope).
+  const openRef = useRef(openPanel);
+  useEffect(() => {
+    openRef.current = openPanel;
+  });
+  const canOpen = stories.length > 0;
+  useEffect(() => {
+    if (open || !canOpen) return undefined;
+    const onKeyDown = (e) => {
+      if (
+        (e.key === "s" || e.key === "S") &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !e.repeat &&
+        letterShortcutAvailable(e)
+      ) {
+        e.preventDefault(); // or the S lands in the filter box
+        openRef.current();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, canOpen]);
+
   // A click anywhere else closes it.
   useEffect(() => {
     if (!open) return;
@@ -113,7 +140,7 @@ export default function StoryPicker({ stories, activeStoryId, onSelect, glyphFor
         aria-expanded={open}
         disabled={stories.length === 0}
         onClick={() => (open ? setOpen(false) : openPanel())}
-        title={active ? active.title || "Untitled" : undefined}
+        title={`${active ? active.title || "Untitled" : "Choose a story"} (S)`}
       >
         <span className="story-picker-label">{label}</span>
         <span className="story-picker-caret" aria-hidden="true">▾</span>

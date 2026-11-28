@@ -99,7 +99,8 @@ export default function SectionIndex({
         <kbd>Home</kbd>/<kbd>End</kbd>) turn pages from anywhere;{" "}
         <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> does the same while you are
         typing. Hold either to go faster. <kbd>P</kbd> reads the page aloud;
-        turning the page stops it. <kbd>{"\\"}</kbd> jumps to the list.
+        turning the page stops it. <kbd>{"\\"}</kbd> jumps to the list;{" "}
+        <kbd>S</kbd> opens the story picker.
       </p>
 
       {sections.length === 0 ? (
